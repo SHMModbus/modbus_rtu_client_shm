@@ -13,17 +13,22 @@ cmake -build .
 
 ## Use
 ```
-Modbus_TCP_client_shm [OPTION...]
+Modbus_RTU_client_shm [OPTION...]
 
-  -i, --ip arg            ip to listen for incoming connections (default: 0.0.0.0)
-  -p, --port arg          port to listen for incoming connections (default: 502)
+  -d, --device arg        mandatory: serial device
+  -i, --id arg            mandatory: modbus RTU slave id
+  -p, --parity arg        serial parity bit (N(one), E(ven), O(dd)) (default: N)
+      --data-bits arg     serial data bits (5-8) (default: 8)
+      --stop-bits arg     serial stop bits (1-2) (default: 1)
+  -b, --baud arg          serial baud (default: 9600)
+      --rs485             force to use rs485 mode
+      --rs232             force to use rs232 mode
   -n, --name-prefix arg   shared memory name prefix (default: modbus_)
       --do-registers arg  number of digital output registers (default: 65536)
       --di-registers arg  number of digital input registers (default: 65536)
       --ao-registers arg  number of analog output registers (default: 65536)
       --ai-registers arg  number of analog input registers (default: 65536)
   -m, --monitor           output all incoming and outgoing packets to stdout
-  -r, --reconnect         do not terminate if Master disconnects.
   -h, --help              print usage
 
 
