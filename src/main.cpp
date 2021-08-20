@@ -17,7 +17,7 @@ static volatile bool terminate = false;
  */
 static void sig_term_handler(int) {
     terminate = true;
-    alarm(1);
+    alarm(1);  // force termination after 1 second
 }
 
 /*! \brief main function
@@ -37,6 +37,11 @@ int main(int argc, char **argv) {
 
     // establish signal handler
     if (signal(SIGINT, sig_term_handler) || signal(SIGTERM, sig_term_handler)) {
+        perror("Failed to establish signal handler");
+        exit(EX_OSERR);
+    }
+
+    if (signal(SIGALRM, [](int) { exit(EX_OK); })) {
         perror("Failed to establish signal handler");
         exit(EX_OSERR);
     }
