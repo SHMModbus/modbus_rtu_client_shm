@@ -144,6 +144,11 @@ int main(int argc, char **argv) {
         exit_usage();
     }
 
+    if (args["rs232"].count() && args["rs485"].count()) {
+        std::cerr << "Cannot operate in RS232 and RS485 mode at the same time." << std::endl;
+        exit_usage();
+    }
+
     // create shared memory object for modbus registers
     Modbus::shm::Shm_Mapping mapping(args["do-registers"].as<std::size_t>(),
                                      args["di-registers"].as<std::size_t>(),
