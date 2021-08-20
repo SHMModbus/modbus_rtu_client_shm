@@ -1,16 +1,24 @@
-#include "Modbus_TCP_Slave.hpp"
+#include "Modbus_RTU_Slave.hpp"
 
 #include <stdexcept>
 #include <unistd.h>
 
 namespace Modbus {
-namespace TCP {
+namespace RTU {
 
 static constexpr int MAX_REGS = 0x10000;
 
-Slave::Slave(const std::string &ip, unsigned short port, modbus_mapping_t *mapping) {
+Slave::Slave(const std::string &device,
+             int                id,
+             char               parity,
+             int                data_bits,
+             int                stop_bits,
+             int                baud,
+             bool               rs232,
+             bool               rs485,
+             modbus_mapping_t * mapping) {
     // create modbus object
-    modbus = modbus_new_tcp(ip.c_str(), static_cast<int>(port));
+    modbus = modbus_new_rtu(device.c_str(), baud, parity, data_bits, stop_bits);
     if (modbus == nullptr) {
         const std::string error_msg = modbus_strerror(errno);
         throw std::runtime_error("failed to create modbus instance: " + error_msg);
@@ -31,11 +39,24 @@ Slave::Slave(const std::string &ip, unsigned short port, modbus_mapping_t *mappi
         delete_mapping = false;
     }
 
-    // create tcp socket
-    socket = modbus_tcp_listen(modbus, 1);
-    if (socket == -1) {
+    if (modbus_set_slave(modbus, id)) { throw std::runtime_error("invalid modbus id"); }
+
+    // connect
+    int tmp = modbus_connect(modbus);
+    if (tmp < 0) {
         const std::string error_msg = modbus_strerror(errno);
-        throw std::runtime_error("failed to create tcp socket: " + error_msg);
+        throw std::runtime_error("modbus_connect failed: " + error_msg);
+    }
+
+    // set mode
+    if (rs485 && modbus_rtu_set_serial_mode(modbus, MODBUS_RTU_RS485)) {
+        const std::string error_msg = modbus_strerror(errno);
+        throw std::runtime_error("Failed to set modbus rtu mode to RS485: " + error_msg);
+    }
+
+    if (rs232 && modbus_rtu_set_serial_mode(modbus, MODBUS_RTU_RS232)) {
+        const std::string error_msg = modbus_strerror(errno);
+        throw std::runtime_error("Failed to set modbus rtu mode to RS232: " + error_msg);
     }
 }
 
@@ -45,21 +66,12 @@ Slave::~Slave() {
         modbus_free(modbus);
     }
     if (mapping != nullptr && delete_mapping) modbus_mapping_free(mapping);
-    if (socket != -1) { close(socket); }
 }
 
 void Slave::set_debug(bool debug) {
     if (modbus_set_debug(modbus, debug)) {
         const std::string error_msg = modbus_strerror(errno);
         throw std::runtime_error("failed to enable modbus debugging mode: " + error_msg);
-    }
-}
-
-void Slave::connect_client() {
-    int tmp = modbus_tcp_accept(modbus, &socket);
-    if (tmp < 0) {
-        const std::string error_msg = modbus_strerror(errno);
-        throw std::runtime_error("modbus_tcp_accept failed: " + error_msg);
     }
 }
 
@@ -81,5 +93,5 @@ bool Slave::handle_request() {
     return false;
 }
 
-}  // namespace TCP
+}  // namespace RTU
 }  // namespace Modbus
