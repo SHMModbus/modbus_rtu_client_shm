@@ -9,7 +9,7 @@ namespace RTU {
 //! Modbus RTU slave
 class Slave {
 private:
-    modbus_t *        modbus;          //!< modbus object (see libmodbus library)
+    modbus_t         *modbus;          //!< modbus object (see libmodbus library)
     modbus_mapping_t *mapping;         //!< modbus data object (see libmodbus library)
     bool              delete_mapping;  //!< indicates whether the mapping object was created by this instance
 
@@ -34,7 +34,7 @@ public:
                    int                baud,
                    bool               rs232,
                    bool               rs485,
-                   modbus_mapping_t * mapping = nullptr);
+                   modbus_mapping_t  *mapping = nullptr);
 
     /*! \brief destroy the modbus slave
      *

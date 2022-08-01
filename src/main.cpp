@@ -72,6 +72,7 @@ int main(int argc, char **argv) {
             "ai-registers", "number of analog input registers", cxxopts::value<std::size_t>()->default_value("65536"));
     options.add_options()("m,monitor", "output all incoming and outgoing packets to stdout");
     options.add_options()("h,help", "print usage");
+    options.add_options()("version", "print version information");
     // clang-format on
 
     // parse arguments
@@ -122,6 +123,12 @@ int main(int argc, char **argv) {
         std::cout << "LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM," << std::endl;
         std::cout << "OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE" << std::endl;
         std::cout << "SOFTWARE." << std::endl;
+        exit(EX_OK);
+    }
+
+    // print version
+    if (args.count("version")) {
+        std::cout << PROJECT_NAME << ' ' << PROJECT_VERSION << std::endl;
         exit(EX_OK);
     }
 

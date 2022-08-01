@@ -16,7 +16,7 @@ Slave::Slave(const std::string &device,
              int                baud,
              bool               rs232,
              bool               rs485,
-             modbus_mapping_t * mapping) {
+             modbus_mapping_t  *mapping) {
     // create modbus object
     modbus = modbus_new_rtu(device.c_str(), baud, parity, data_bits, stop_bits);
     if (modbus == nullptr) {
