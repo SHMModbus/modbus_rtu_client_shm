@@ -465,3 +465,6 @@ modules.order
 Module.symvers
 Mkfile.old
 dkms.conf
+
+!network.koesling.modbus-rtu-client-shm.yml
+
