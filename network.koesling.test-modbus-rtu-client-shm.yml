@@ -7,7 +7,7 @@ finish-args:
   - --device=shm
   - --share=network
 modules:
-  - name: Modbus_TCP_client_shm
+  - name: Modbus_RTU_client_shm
     buildsystem: simple
     build-commands:
     # build
