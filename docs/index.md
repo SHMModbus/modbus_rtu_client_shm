@@ -26,11 +26,30 @@ The application requires a serial device (```--device```) and a client id (```--
 By using the command line argument ```--monitor``` all incoming and outgoing packets are printed on stdout.
 This option should be used carefully, as it generates large amounts of output depending on the masters polling cycle and the number of used registers.
 
-The client creates four shared memories and names them ```modbus_DO```, ```modbus_DI```, ```modbus_AO``` and `````` by default.
-The prefix modbus_ can be changed via the argument ```--name-prefix```. The suffixes for the register type (DO, DI, AO, AI) cannot be changed and will always be appended to the prefix.
+The client creates four shared memories and names them ```modbus_DO```, ```modbus_DI```, ```modbus_AO``` and ```modbus_AI``` by default.
+The prefix modbus_ can be changed via the argument ```--name-prefix```. 
+The suffixes for the register type (DO, DI, AO, AI) cannot be changed and will always be appended to the prefix.
 
 By default, the client starts with the maximum possible number of modbus registers (65536 per register type).
 The number of registers can be changed using the ```--xx-registers``` (replace xx with the register type) command line arguments.
+
+### Examples
+
+Connect as device with id ```1``` using serial device ```/dev/ttyS0```:
+```
+modbus-rtu-client-shm -d /dev/ttyS0 -i 1
+```
+
+
+Connect as device with id ```1``` using serial device ```/dev/ttyS0``` with a baud rate of ```115200``` and a odd parity bit:
+```
+modbus-rtu-client-shm -d /dev/ttyS0 -i 1 -b 115200 -p O
+```
+
+Connect as device with id ```1``` using serial device ```/dev/ttyS0``` and enforce rs232 mode:
+```
+modbus-rtu-client-shm -d /dev/ttyS0 -i 1 --rs232
+```
 
 ## Using the Flatpak package
 The flatpak package can be installed via the .flatpak file.
