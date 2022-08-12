@@ -62,6 +62,13 @@ Slave::Slave(const std::string &device,
         const std::string error_msg = modbus_strerror(errno);
         throw std::runtime_error("Failed to set modbus rtu mode to RS232: " + error_msg);
     }
+
+    // get socket
+    socket = modbus_get_socket(modbus);
+    if (socket == -1) {
+        const std::string error_msg = modbus_strerror(errno);
+        throw std::runtime_error("Failed to get socket: " + error_msg);
+    }
 }
 
 Slave::~Slave() {
@@ -95,6 +102,68 @@ bool Slave::handle_request() {
     }
 
     return false;
+}
+
+struct timeout_t {
+    uint32_t sec;
+    uint32_t usec;
+};
+
+static inline timeout_t double_to_timeout_t(double timeout) {
+    timeout_t ret {};
+
+    ret.sec = static_cast<uint32_t>(timeout);
+
+    double fractional = timeout - static_cast<double>(ret.sec);
+    ret.usec          = static_cast<uint32_t>(fractional * 1000.0 * 1000.0);
+
+    return ret;
+}
+
+void Slave::set_byte_timeout(double timeout) {
+    const auto T   = double_to_timeout_t(timeout);
+    auto       ret = modbus_set_byte_timeout(modbus, T.sec, T.usec);
+
+    if (ret != 0) {
+        const std::string error_msg = modbus_strerror(errno);
+        throw std::runtime_error("modbus_receive failed: " + error_msg + ' ' + std::to_string(errno));
+    }
+}
+
+void Slave::set_response_timeout(double timeout) {
+    const auto T   = double_to_timeout_t(timeout);
+    auto       ret = modbus_set_response_timeout(modbus, T.sec, T.usec);
+
+    if (ret != 0) {
+        const std::string error_msg = modbus_strerror(errno);
+        throw std::runtime_error("modbus_receive failed: " + error_msg + ' ' + std::to_string(errno));
+    }
+}
+
+double Slave::get_byte_timeout() {
+    timeout_t timeout {};
+
+    auto ret = modbus_get_byte_timeout(modbus, &timeout.sec, &timeout.usec);
+
+    if (ret != 0) {
+        const std::string error_msg = modbus_strerror(errno);
+        throw std::runtime_error("modbus_receive failed: " + error_msg + ' ' + std::to_string(errno));
+    }
+
+    return static_cast<double>(timeout.sec) + (static_cast<double>(timeout.usec) / (1000.0 * 1000.0));
+}
+
+double Slave::get_response_timeout() {
+    timeout_t timeout {};
+
+    auto ret = modbus_get_response_timeout(modbus, &timeout.sec, &timeout.usec);
+
+    if (ret != 0) {
+        const std::string error_msg = modbus_strerror(errno);
+        throw std::runtime_error("modbus_receive failed: " + error_msg + ' ' + std::to_string(errno));
+    }
+
+    return static_cast<double>(timeout.sec) + (static_cast<double>(timeout.usec) / (1000.0 * 1000.0));
 }
 
 }  // namespace RTU

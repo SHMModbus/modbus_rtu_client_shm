@@ -18,12 +18,15 @@
 //! terminate flag
 static volatile bool terminate = false;
 
+//! modbus socket (to be closed if termination is requested)
+static int socket = -1;
+
 /*! \brief signal handler (SIGINT and SIGTERM)
  *
  */
 static void sig_term_handler(int) {
+    if (socket != -1) close(socket);
     terminate = true;
-    alarm(1);  // force termination after 1 second
 }
 
 /*! \brief main function
@@ -38,7 +41,7 @@ int main(int argc, char **argv) {
 
     auto exit_usage = [&exe_name]() {
         std::cerr << "Use '" << exe_name << " --help' for more information." << std::endl;
-        exit(EX_USAGE);
+        return EX_USAGE;
     };
 
     auto euid = geteuid();
@@ -47,12 +50,12 @@ int main(int argc, char **argv) {
     // establish signal handler
     if (signal(SIGINT, sig_term_handler) || signal(SIGTERM, sig_term_handler)) {
         perror("Failed to establish signal handler");
-        exit(EX_OSERR);
+        return EX_OSERR;
     }
 
     if (signal(SIGALRM, [](int) { exit(EX_OK); })) {
         perror("Failed to establish signal handler");
-        exit(EX_OSERR);
+        return EX_OSERR;
     }
 
     // all command line arguments
@@ -77,6 +80,24 @@ int main(int argc, char **argv) {
     options.add_options()(
             "ai-registers", "number of analog input registers", cxxopts::value<std::size_t>()->default_value("65536"));
     options.add_options()("m,monitor", "output all incoming and outgoing packets to stdout");
+    options.add_options()("byte-timeout",
+                          "timeout interval in seconds between two consecutive bytes of the same message. "
+                          "In most cases it is sufficient to set the response timeout. "
+                          "Fractional values are possible.",
+                          cxxopts::value<double>());
+    options.add_options()("response-timeout",
+                          "set the timeout interval in seconds used to wait for a response. "
+                          "When a byte timeout is set, if the elapsed time for the first byte of response is longer "
+                          "than the given timeout, a timeout is detected. "
+                          "When byte timeout is disabled, the full confirmation response must be received before "
+                          "expiration of the response timeout. "
+                          "Fractional values are possible.",
+                          cxxopts::value<double>());
+    options.add_options()("force",
+                          "Force the use of the shared memory even if it already exists. "
+                          "Do not use this option per default! "
+                          "It should only be used if the shared memory of an improperly terminated instance continues "
+                          "to exist as an orphan and is no longer used.");
     options.add_options()("h,help", "print usage");
     options.add_options()("version", "print version information");
     options.add_options()("license", "show licences");
@@ -88,7 +109,7 @@ int main(int argc, char **argv) {
         args = options.parse(argc, argv);
     } catch (cxxopts::OptionParseException &e) {
         std::cerr << "Failed to parse arguments: " << e.what() << '.' << std::endl;
-        exit_usage();
+        return exit_usage();
     }
 
     // print usage
@@ -112,72 +133,80 @@ int main(int argc, char **argv) {
 
     // print version
     if (args.count("version")) {
-        std::cout << PROJECT_NAME << ' ' << PROJECT_VERSION << std::endl;
-        exit(EX_OK);
+        std::cout << PROJECT_NAME << ' ' << PROJECT_VERSION << " (compiled with " << COMPILER_INFO << " on "
+                  << SYSTEM_INFO << ')' << std::endl;
+        return EX_OK;
     }
 
     // print licenses
     if (args.count("license")) {
         print_licenses(std::cout);
-        exit(EX_OK);
+        return EX_OK;
     }
 
     // check arguments
     if (args["do-registers"].as<std::size_t>() > 0x10000) {
         std::cerr << "to many do_registers (maximum: 65536)." << std::endl;
-        exit_usage();
+        return exit_usage();
     }
 
     if (args["di-registers"].as<std::size_t>() > 0x10000) {
         std::cerr << "to many do_registers (maximum: 65536)." << std::endl;
-        exit_usage();
+        return exit_usage();
     }
 
     if (args["ao-registers"].as<std::size_t>() > 0x10000) {
         std::cerr << "to many do_registers (maximum: 65536)." << std::endl;
-        exit_usage();
+        return exit_usage();
     }
 
     if (args["ai-registers"].as<std::size_t>() > 0x10000) {
         std::cerr << "to many do_registers (maximum: 65536)." << std::endl;
-        exit_usage();
+        return exit_usage();
     }
 
     const auto PARITY = toupper(args["parity"].as<char>());
     if (PARITY != 'N' && PARITY != 'E' && PARITY != 'O') {
         std::cerr << "invalid parity" << std::endl;
-        exit_usage();
+        return exit_usage();
     }
 
     const auto DATA_BITS = toupper(args["data-bits"].as<int>());
     if (DATA_BITS < 5 || DATA_BITS > 8) {
         std::cerr << "data-bits out of range" << std::endl;
-        exit_usage();
+        return exit_usage();
     }
 
     const auto STOP_BITS = toupper(args["stop-bits"].as<int>());
     if (STOP_BITS < 1 || STOP_BITS > 2) {
         std::cerr << "stop-bits out of range" << std::endl;
-        exit_usage();
+        return exit_usage();
     }
 
     const auto BAUD = toupper(args["baud"].as<int>());
     if (BAUD < 1) {
         std::cerr << "invalid baud rate" << std::endl;
-        exit_usage();
+        return exit_usage();
     }
 
     if (args["rs232"].count() && args["rs485"].count()) {
         std::cerr << "Cannot operate in RS232 and RS485 mode at the same time." << std::endl;
-        exit_usage();
+        return exit_usage();
     }
 
     // create shared memory object for modbus registers
-    Modbus::shm::Shm_Mapping mapping(args["do-registers"].as<std::size_t>(),
-                                     args["di-registers"].as<std::size_t>(),
-                                     args["ao-registers"].as<std::size_t>(),
-                                     args["ai-registers"].as<std::size_t>(),
-                                     args["name-prefix"].as<std::string>());
+    std::unique_ptr<Modbus::shm::Shm_Mapping> mapping;
+    try {
+        mapping = std::make_unique<Modbus::shm::Shm_Mapping>(args["do-registers"].as<std::size_t>(),
+                                                             args["di-registers"].as<std::size_t>(),
+                                                             args["ao-registers"].as<std::size_t>(),
+                                                             args["ai-registers"].as<std::size_t>(),
+                                                             args["name-prefix"].as<std::string>(),
+                                                             args.count("force") > 0);
+    } catch (const std::system_error &e) {
+        std::cerr << e.what() << std::endl;
+        return EX_OSERR;
+    }
 
     // create slave
     std::unique_ptr<Modbus::RTU::Slave> slave;
@@ -190,14 +219,25 @@ int main(int argc, char **argv) {
                                                      BAUD,
                                                      args.count("rs232"),
                                                      args.count("rs485"),
-                                                     mapping.get_mapping());
+                                                     mapping->get_mapping());
         slave->set_debug(args.count("monitor"));
     } catch (const std::runtime_error &e) {
         std::cerr << e.what() << std::endl;
-        exit(EX_SOFTWARE);
+        return EX_SOFTWARE;
     } catch (cxxopts::option_has_no_value_exception &e) {
         std::cerr << e.what() << std::endl;
-        exit_usage();
+        return exit_usage();
+    }
+    socket = slave->get_socket();
+
+    // set timeouts if required
+    try {
+        if (args.count("response-timeout")) { slave->set_response_timeout(args["response-timeout"].as<double>()); }
+
+        if (args.count("byte-timeout")) { slave->set_byte_timeout(args["byte-timeout"].as<double>()); }
+    } catch (const std::runtime_error &e) {
+        std::cerr << e.what() << std::endl;
+        return EX_SOFTWARE;
     }
 
     std::cerr << "Connected to bus." << std::endl;
