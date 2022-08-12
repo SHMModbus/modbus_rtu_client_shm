@@ -112,7 +112,8 @@ int main(int argc, char **argv) {
 
     // print version
     if (args.count("version")) {
-        std::cout << PROJECT_NAME << ' ' << PROJECT_VERSION << std::endl;
+        std::cout << PROJECT_NAME << ' ' << PROJECT_VERSION << " (compiled with " << COMPILER_INFO << " on "
+                  << SYSTEM_INFO << ')' << std::endl;
         exit(EX_OK);
     }
 
