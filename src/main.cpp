@@ -90,6 +90,11 @@ int main(int argc, char **argv) {
                           "expiration of the response timeout. "
                           "Fractional values are possible.",
                           cxxopts::value<double>());
+    options.add_options()("force",
+                          "Force the use of the shared memory even if it already exists. "
+                          "Do not use this option per default! "
+                          "It should only be used if the shared memory of an improperly terminated instance continues "
+                          "to exist as an orphan and is no longer used.");
     options.add_options()("h,help", "print usage");
     options.add_options()("version", "print version information");
     options.add_options()("license", "show licences");
@@ -187,11 +192,18 @@ int main(int argc, char **argv) {
     }
 
     // create shared memory object for modbus registers
-    Modbus::shm::Shm_Mapping mapping(args["do-registers"].as<std::size_t>(),
-                                     args["di-registers"].as<std::size_t>(),
-                                     args["ao-registers"].as<std::size_t>(),
-                                     args["ai-registers"].as<std::size_t>(),
-                                     args["name-prefix"].as<std::string>());
+    std::unique_ptr<Modbus::shm::Shm_Mapping> mapping;
+    try {
+        mapping = std::make_unique<Modbus::shm::Shm_Mapping>(args["do-registers"].as<std::size_t>(),
+                                                             args["di-registers"].as<std::size_t>(),
+                                                             args["ao-registers"].as<std::size_t>(),
+                                                             args["ai-registers"].as<std::size_t>(),
+                                                             args["name-prefix"].as<std::string>(),
+                                                             args.count("force") > 0);
+    } catch (const std::system_error &e) {
+        std::cerr << e.what() << std::endl;
+        return EX_OSERR;
+    }
 
     // create slave
     std::unique_ptr<Modbus::RTU::Slave> slave;
@@ -204,7 +216,7 @@ int main(int argc, char **argv) {
                                                      BAUD,
                                                      args.count("rs232"),
                                                      args.count("rs485"),
-                                                     mapping.get_mapping());
+                                                     mapping->get_mapping());
         slave->set_debug(args.count("monitor"));
     } catch (const std::runtime_error &e) {
         std::cerr << e.what() << std::endl;
