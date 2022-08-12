@@ -77,6 +77,19 @@ int main(int argc, char **argv) {
     options.add_options()(
             "ai-registers", "number of analog input registers", cxxopts::value<std::size_t>()->default_value("65536"));
     options.add_options()("m,monitor", "output all incoming and outgoing packets to stdout");
+    options.add_options()("byte-timeout",
+                          "timeout interval in seconds between two consecutive bytes of the same message. "
+                          "In most cases it is sufficient to set the response timeout. "
+                          "Fractional values are possible.",
+                          cxxopts::value<double>());
+    options.add_options()("response-timeout",
+                          "set the timeout interval in seconds used to wait for a response. "
+                          "When a byte timeout is set, if the elapsed time for the first byte of response is longer "
+                          "than the given timeout, a timeout is detected. "
+                          "When byte timeout is disabled, the full confirmation response must be received before "
+                          "expiration of the response timeout. "
+                          "Fractional values are possible.",
+                          cxxopts::value<double>());
     options.add_options()("h,help", "print usage");
     options.add_options()("version", "print version information");
     options.add_options()("license", "show licences");
@@ -199,6 +212,16 @@ int main(int argc, char **argv) {
     } catch (cxxopts::option_has_no_value_exception &e) {
         std::cerr << e.what() << std::endl;
         return exit_usage();
+    }
+
+    // set timeouts if required
+    try {
+        if (args.count("response-timeout")) { slave->set_response_timeout(args["response-timeout"].as<double>()); }
+
+        if (args.count("byte-timeout")) { slave->set_byte_timeout(args["byte-timeout"].as<double>()); }
+    } catch (const std::runtime_error &e) {
+        std::cerr << e.what() << std::endl;
+        return EX_SOFTWARE;
     }
 
     std::cerr << "Connected to bus." << std::endl;

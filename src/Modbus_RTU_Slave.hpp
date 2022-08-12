@@ -57,6 +57,36 @@ public:
      * @return true: connection closed
      */
     bool handle_request();
+
+    /*!
+     * \brief set byte timeout
+     *
+     * @details see https://libmodbus.org/docs/v3.1.7/modbus_set_byte_timeout.html
+     *
+     * @param timeout byte timeout in seconds
+     */
+    void set_byte_timeout(double timeout);
+
+    /*!
+     * \brief set byte timeout
+     *
+     * @details see https://libmodbus.org/docs/v3.1.7/modbus_set_response_timeout.html
+     *
+     * @param timeout byte response in seconds
+     */
+    void set_response_timeout(double timeout);
+
+    /**
+     * \brief get byte timeout in seconds
+     * @return byte timeout
+     */
+    double get_byte_timeout();
+
+    /**
+     * \brief get response timeout in seconds
+     * @return response timeout
+     */
+    double get_response_timeout();
 };
 
 }  // namespace RTU
