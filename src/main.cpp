@@ -38,7 +38,7 @@ int main(int argc, char **argv) {
 
     auto exit_usage = [&exe_name]() {
         std::cerr << "Use '" << exe_name << " --help' for more information." << std::endl;
-        exit(EX_USAGE);
+        return EX_USAGE;
     };
 
     auto euid = geteuid();
@@ -47,12 +47,12 @@ int main(int argc, char **argv) {
     // establish signal handler
     if (signal(SIGINT, sig_term_handler) || signal(SIGTERM, sig_term_handler)) {
         perror("Failed to establish signal handler");
-        exit(EX_OSERR);
+        return EX_OSERR;
     }
 
     if (signal(SIGALRM, [](int) { exit(EX_OK); })) {
         perror("Failed to establish signal handler");
-        exit(EX_OSERR);
+        return EX_OSERR;
     }
 
     // all command line arguments
@@ -88,7 +88,7 @@ int main(int argc, char **argv) {
         args = options.parse(argc, argv);
     } catch (cxxopts::OptionParseException &e) {
         std::cerr << "Failed to parse arguments: " << e.what() << '.' << std::endl;
-        exit_usage();
+        return exit_usage();
     }
 
     // print usage
@@ -114,63 +114,63 @@ int main(int argc, char **argv) {
     if (args.count("version")) {
         std::cout << PROJECT_NAME << ' ' << PROJECT_VERSION << " (compiled with " << COMPILER_INFO << " on "
                   << SYSTEM_INFO << ')' << std::endl;
-        exit(EX_OK);
+        return EX_OK;
     }
 
     // print licenses
     if (args.count("license")) {
         print_licenses(std::cout);
-        exit(EX_OK);
+        return EX_OK;
     }
 
     // check arguments
     if (args["do-registers"].as<std::size_t>() > 0x10000) {
         std::cerr << "to many do_registers (maximum: 65536)." << std::endl;
-        exit_usage();
+        return exit_usage();
     }
 
     if (args["di-registers"].as<std::size_t>() > 0x10000) {
         std::cerr << "to many do_registers (maximum: 65536)." << std::endl;
-        exit_usage();
+        return exit_usage();
     }
 
     if (args["ao-registers"].as<std::size_t>() > 0x10000) {
         std::cerr << "to many do_registers (maximum: 65536)." << std::endl;
-        exit_usage();
+        return exit_usage();
     }
 
     if (args["ai-registers"].as<std::size_t>() > 0x10000) {
         std::cerr << "to many do_registers (maximum: 65536)." << std::endl;
-        exit_usage();
+        return exit_usage();
     }
 
     const auto PARITY = toupper(args["parity"].as<char>());
     if (PARITY != 'N' && PARITY != 'E' && PARITY != 'O') {
         std::cerr << "invalid parity" << std::endl;
-        exit_usage();
+        return exit_usage();
     }
 
     const auto DATA_BITS = toupper(args["data-bits"].as<int>());
     if (DATA_BITS < 5 || DATA_BITS > 8) {
         std::cerr << "data-bits out of range" << std::endl;
-        exit_usage();
+        return exit_usage();
     }
 
     const auto STOP_BITS = toupper(args["stop-bits"].as<int>());
     if (STOP_BITS < 1 || STOP_BITS > 2) {
         std::cerr << "stop-bits out of range" << std::endl;
-        exit_usage();
+        return exit_usage();
     }
 
     const auto BAUD = toupper(args["baud"].as<int>());
     if (BAUD < 1) {
         std::cerr << "invalid baud rate" << std::endl;
-        exit_usage();
+        return exit_usage();
     }
 
     if (args["rs232"].count() && args["rs485"].count()) {
         std::cerr << "Cannot operate in RS232 and RS485 mode at the same time." << std::endl;
-        exit_usage();
+        return exit_usage();
     }
 
     // create shared memory object for modbus registers
@@ -195,10 +195,10 @@ int main(int argc, char **argv) {
         slave->set_debug(args.count("monitor"));
     } catch (const std::runtime_error &e) {
         std::cerr << e.what() << std::endl;
-        exit(EX_SOFTWARE);
+        return EX_SOFTWARE;
     } catch (cxxopts::option_has_no_value_exception &e) {
         std::cerr << e.what() << std::endl;
-        exit_usage();
+        return exit_usage();
     }
 
     std::cerr << "Connected to bus." << std::endl;
