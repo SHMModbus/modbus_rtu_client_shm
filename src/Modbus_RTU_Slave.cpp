@@ -62,6 +62,13 @@ Slave::Slave(const std::string &device,
         const std::string error_msg = modbus_strerror(errno);
         throw std::runtime_error("Failed to set modbus rtu mode to RS232: " + error_msg);
     }
+
+    // get socket
+    socket = modbus_get_socket(modbus);
+    if (socket == -1) {
+        const std::string error_msg = modbus_strerror(errno);
+        throw std::runtime_error("Failed to get socket: " + error_msg);
+    }
 }
 
 Slave::~Slave() {

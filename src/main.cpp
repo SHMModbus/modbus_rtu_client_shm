@@ -18,12 +18,15 @@
 //! terminate flag
 static volatile bool terminate = false;
 
+//! modbus socket (to be closed if termination is requested)
+static int socket = -1;
+
 /*! \brief signal handler (SIGINT and SIGTERM)
  *
  */
 static void sig_term_handler(int) {
+    if (socket != -1) close(socket);
     terminate = true;
-    alarm(1);  // force termination after 1 second
 }
 
 /*! \brief main function
@@ -225,6 +228,7 @@ int main(int argc, char **argv) {
         std::cerr << e.what() << std::endl;
         return exit_usage();
     }
+    socket = slave->get_socket();
 
     // set timeouts if required
     try {
