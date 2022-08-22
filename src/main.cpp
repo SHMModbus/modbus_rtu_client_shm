@@ -29,6 +29,17 @@ static void sig_term_handler(int) {
     terminate = true;
 }
 
+constexpr std::array<int, 10> TERM_SIGNALS = {SIGINT,
+                                              SIGTERM,
+                                              SIGHUP,
+                                              SIGIO,  // should not happen
+                                              SIGPIPE,
+                                              SIGPOLL,  // should not happen
+                                              SIGPROF,  // should not happen
+                                              SIGUSR1,
+                                              SIGUSR2,
+                                              SIGVTALRM};
+
 /*! \brief main function
  *
  * @param argc number of arguments
@@ -47,16 +58,24 @@ int main(int argc, char **argv) {
     auto euid = geteuid();
     if (!euid) std::cerr << "!!!! WARNING: You should not execute this program with root privileges !!!!" << std::endl;
 
+#ifdef COMPILER_CLANG
+#    pragma clang diagnostic push
+#    pragma clang diagnostic ignored "-Wdisabled-macro-expansion"
+#endif
     // establish signal handler
-    if (signal(SIGINT, sig_term_handler) || signal(SIGTERM, sig_term_handler)) {
-        perror("Failed to establish signal handler");
-        return EX_OSERR;
+    struct sigaction term_sa;
+    term_sa.sa_handler = sig_term_handler;
+    term_sa.sa_flags   = SA_RESTART;
+    sigemptyset(&term_sa.sa_mask);
+    for (const auto SIGNO : TERM_SIGNALS) {
+        if (sigaction(SIGNO, &term_sa, nullptr)) {
+            perror("Failed to establish signal handler");
+            return EX_OSERR;
+        }
     }
-
-    if (signal(SIGALRM, [](int) { exit(EX_OK); })) {
-        perror("Failed to establish signal handler");
-        return EX_OSERR;
-    }
+#ifdef COMPILER_CLANG
+#    pragma clang diagnostic pop
+#endif
 
     // all command line arguments
     options.add_options()("d,device", "mandatory: serial device", cxxopts::value<std::string>());
