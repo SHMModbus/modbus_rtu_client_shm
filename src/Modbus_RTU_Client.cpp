@@ -3,7 +3,7 @@
  * This program is free software. You can redistribute it and/or modify it under the terms of the MIT License.
  */
 
-#include "Modbus_RTU_Slave.hpp"
+#include "Modbus_RTU_Client.hpp"
 
 #include <stdexcept>
 
@@ -12,15 +12,15 @@ namespace RTU {
 
 static constexpr int MAX_REGS = 0x10000;
 
-Slave::Slave(const std::string &device,
-             int                id,
-             char               parity,
-             int                data_bits,
-             int                stop_bits,
-             int                baud,
-             bool               rs232,
-             bool               rs485,
-             modbus_mapping_t  *mapping) {
+Client::Client(const std::string &device,
+               int                id,
+               char               parity,
+               int                data_bits,
+               int                stop_bits,
+               int                baud,
+               bool               rs232,
+               bool               rs485,
+               modbus_mapping_t  *mapping) {
     // create modbus object
     modbus = modbus_new_rtu(device.c_str(), baud, parity, data_bits, stop_bits);
     if (modbus == nullptr) {
@@ -71,7 +71,7 @@ Slave::Slave(const std::string &device,
     }
 }
 
-Slave::~Slave() {
+Client::~Client() {
     if (modbus != nullptr) {
         modbus_close(modbus);
         modbus_free(modbus);
@@ -79,14 +79,14 @@ Slave::~Slave() {
     if (mapping != nullptr && delete_mapping) modbus_mapping_free(mapping);
 }
 
-void Slave::set_debug(bool debug) {
+void Client::set_debug(bool debug) {
     if (modbus_set_debug(modbus, debug)) {
         const std::string error_msg = modbus_strerror(errno);
         throw std::runtime_error("failed to enable modbus debugging mode: " + error_msg);
     }
 }
 
-bool Slave::handle_request() {
+bool Client::handle_request() {
     // receive modbus request
     uint8_t query[MODBUS_TCP_MAX_ADU_LENGTH];
     int     rc = modbus_receive(modbus, query);
@@ -120,7 +120,7 @@ static inline timeout_t double_to_timeout_t(double timeout) {
     return ret;
 }
 
-void Slave::set_byte_timeout(double timeout) {
+void Client::set_byte_timeout(double timeout) {
     const auto T   = double_to_timeout_t(timeout);
     auto       ret = modbus_set_byte_timeout(modbus, T.sec, T.usec);
 
@@ -130,7 +130,7 @@ void Slave::set_byte_timeout(double timeout) {
     }
 }
 
-void Slave::set_response_timeout(double timeout) {
+void Client::set_response_timeout(double timeout) {
     const auto T   = double_to_timeout_t(timeout);
     auto       ret = modbus_set_response_timeout(modbus, T.sec, T.usec);
 
@@ -140,7 +140,7 @@ void Slave::set_response_timeout(double timeout) {
     }
 }
 
-double Slave::get_byte_timeout() {
+double Client::get_byte_timeout() {
     timeout_t timeout {};
 
     auto ret = modbus_get_byte_timeout(modbus, &timeout.sec, &timeout.usec);
@@ -153,7 +153,7 @@ double Slave::get_byte_timeout() {
     return static_cast<double>(timeout.sec) + (static_cast<double>(timeout.usec) / (1000.0 * 1000.0));
 }
 
-double Slave::get_response_timeout() {
+double Client::get_response_timeout() {
     timeout_t timeout {};
 
     auto ret = modbus_get_response_timeout(modbus, &timeout.sec, &timeout.usec);

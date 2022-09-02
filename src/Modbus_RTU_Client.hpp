@@ -11,8 +11,8 @@
 namespace Modbus {
 namespace RTU {
 
-//! Modbus RTU slave
-class Slave {
+//! Modbus RTU client
+class Client {
 private:
     modbus_t         *modbus;          //!< modbus object (see libmodbus library)
     modbus_mapping_t *mapping;         //!< modbus data object (see libmodbus library)
@@ -20,10 +20,10 @@ private:
     int               socket = -1;     //!< internal modbus communication socket
 
 public:
-    /*! \brief create modbus slave (TCP server)
+    /*! \brief create modbus client (TCP server)
      *
      * @param device serial device
-     * @param id modbus rtu slave id
+     * @param id modbus rtu client id
      * @param parity serial parity bit (N(one), E(ven), O(dd))
      * @param data_bits number of serial data bits
      * @param stop_bits number of serial stop bits
@@ -32,20 +32,20 @@ public:
      * @param rs485 connect using rs485 mode
      * @param mapping modbus mapping object (nullptr: an mapping object with maximum size is generated)
      */
-    explicit Slave(const std::string &device,
-                   int                id,
-                   char               parity,
-                   int                data_bits,
-                   int                stop_bits,
-                   int                baud,
-                   bool               rs232,
-                   bool               rs485,
-                   modbus_mapping_t  *mapping = nullptr);
+    explicit Client(const std::string &device,
+                    int                id,
+                    char               parity,
+                    int                data_bits,
+                    int                stop_bits,
+                    int                baud,
+                    bool               rs232,
+                    bool               rs485,
+                    modbus_mapping_t  *mapping = nullptr);
 
-    /*! \brief destroy the modbus slave
+    /*! \brief destroy the modbus client
      *
      */
-    ~Slave();
+    ~Client();
 
     /*! \brief enable/disable debugging output
      *
@@ -53,7 +53,7 @@ public:
      */
     void set_debug(bool debug);
 
-    /*! \brief wait for request from Master and generate reply
+    /*! \brief wait for request from Modbus Server and generate reply
      *
      * @return true: connection closed
      */

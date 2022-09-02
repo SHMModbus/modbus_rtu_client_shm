@@ -11,7 +11,7 @@
 #include <sysexits.h>
 #include <unistd.h>
 
-#include "Modbus_RTU_Slave.hpp"
+#include "Modbus_RTU_Client.hpp"
 #include "license.hpp"
 #include "modbus_shm.hpp"
 
@@ -79,7 +79,7 @@ int main(int argc, char **argv) {
 
     // all command line arguments
     options.add_options()("d,device", "mandatory: serial device", cxxopts::value<std::string>());
-    options.add_options()("i,id", "mandatory: modbus RTU slave id", cxxopts::value<int>());
+    options.add_options()("i,id", "mandatory: modbus RTU client id", cxxopts::value<int>());
     options.add_options()(
             "p,parity", "serial parity bit (N(one), E(ven), O(dd))", cxxopts::value<char>()->default_value("N"));
     options.add_options()("data-bits", "serial data bits (5-8)", cxxopts::value<int>()->default_value("8"));
@@ -137,12 +137,12 @@ int main(int argc, char **argv) {
         std::cout << options.help() << std::endl;
         std::cout << std::endl;
         std::cout << "The modbus registers are mapped to shared memory objects:" << std::endl;
-        std::cout << "    type | name                      | master-access   | shm name" << std::endl;
-        std::cout << "    -----|---------------------------|-----------------|----------------" << std::endl;
-        std::cout << "    DO   | Discrete Output Coils     | read-write      | <name-prefix>DO" << std::endl;
-        std::cout << "    DI   | Discrete Input Coils      | read-only       | <name-prefix>DI" << std::endl;
-        std::cout << "    AO   | Discrete Output Registers | read-write      | <name-prefix>AO" << std::endl;
-        std::cout << "    AI   | Discrete Input Registers  | read-only       | <name-prefix>AI" << std::endl;
+        std::cout << "    type | name                      | mb-server-access | shm name" << std::endl;
+        std::cout << "    -----|---------------------------|------------------|----------------" << std::endl;
+        std::cout << "    DO   | Discrete Output Coils     | read-write       | <name-prefix>DO" << std::endl;
+        std::cout << "    DI   | Discrete Input Coils      | read-only        | <name-prefix>DI" << std::endl;
+        std::cout << "    AO   | Discrete Output Registers | read-write       | <name-prefix>AO" << std::endl;
+        std::cout << "    AI   | Discrete Input Registers  | read-only        | <name-prefix>AI" << std::endl;
         std::cout << std::endl;
         std::cout << "This application uses the following libraries:" << std::endl;
         std::cout << "  - cxxopts by jarro2783 (https://github.com/jarro2783/cxxopts)" << std::endl;
@@ -227,19 +227,19 @@ int main(int argc, char **argv) {
         return EX_OSERR;
     }
 
-    // create slave
-    std::unique_ptr<Modbus::RTU::Slave> slave;
+    // create client
+    std::unique_ptr<Modbus::RTU::Client> client;
     try {
-        slave = std::make_unique<Modbus::RTU::Slave>(args["device"].as<std::string>(),
-                                                     args["id"].as<int>(),
-                                                     PARITY,
-                                                     DATA_BITS,
-                                                     STOP_BITS,
-                                                     BAUD,
-                                                     args.count("rs232"),
-                                                     args.count("rs485"),
-                                                     mapping->get_mapping());
-        slave->set_debug(args.count("monitor"));
+        client = std::make_unique<Modbus::RTU::Client>(args["device"].as<std::string>(),
+                                                       args["id"].as<int>(),
+                                                       PARITY,
+                                                       DATA_BITS,
+                                                       STOP_BITS,
+                                                       BAUD,
+                                                       args.count("rs232"),
+                                                       args.count("rs485"),
+                                                       mapping->get_mapping());
+        client->set_debug(args.count("monitor"));
     } catch (const std::runtime_error &e) {
         std::cerr << e.what() << std::endl;
         return EX_SOFTWARE;
@@ -247,13 +247,13 @@ int main(int argc, char **argv) {
         std::cerr << e.what() << std::endl;
         return exit_usage();
     }
-    socket = slave->get_socket();
+    socket = client->get_socket();
 
     // set timeouts if required
     try {
-        if (args.count("response-timeout")) { slave->set_response_timeout(args["response-timeout"].as<double>()); }
+        if (args.count("response-timeout")) { client->set_response_timeout(args["response-timeout"].as<double>()); }
 
-        if (args.count("byte-timeout")) { slave->set_byte_timeout(args["byte-timeout"].as<double>()); }
+        if (args.count("byte-timeout")) { client->set_byte_timeout(args["byte-timeout"].as<double>()); }
     } catch (const std::runtime_error &e) {
         std::cerr << e.what() << std::endl;
         return EX_SOFTWARE;
@@ -265,7 +265,7 @@ int main(int argc, char **argv) {
     bool connection_closed = false;
     while (!terminate && !connection_closed) {
         try {
-            connection_closed = slave->handle_request();
+            connection_closed = client->handle_request();
         } catch (const std::runtime_error &e) {
             // clang-tidy (LLVM 12.0.1) warning "Condition is always true" is not correct
             if (!terminate) std::cerr << e.what() << std::endl;
@@ -273,7 +273,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    if (connection_closed) std::cerr << "Master closed connection." << std::endl;
+    if (connection_closed) std::cerr << "Modbus Server closed connection." << std::endl;
 
     std::cerr << "Terminating..." << std::endl;
 }

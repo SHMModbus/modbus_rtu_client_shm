@@ -13,7 +13,7 @@ One for each register type:
 - Discrete Input Registers (AI)
 
 All registers are initialized with 0 at the beginning.
-The Modbus master reads and writes directly the values from these shared memories.
+The Modbus server reads and writes directly the values from these shared memories.
 
 The actual functionality of the client is realized by applications that read data from or write data to the shared memory.
 
@@ -24,7 +24,7 @@ The registers (AI, AO) use 10 bit per value. The user is responsible for handlin
 The application requires a serial device (```--device```) and a client id (```--id```) as arguments. All other arguments are optional.
 
 By using the command line argument ```--monitor``` all incoming and outgoing packets are printed on stdout.
-This option should be used carefully, as it generates large amounts of output depending on the masters polling cycle and the number of used registers.
+This option should be used carefully, as it generates large amounts of output depending on the Modbus servers polling cycle and the number of used registers.
 
 The client creates four shared memories and names them ```modbus_DO```, ```modbus_DI```, ```modbus_AO``` and ```modbus_AI``` by default.
 The prefix modbus_ can be changed via the argument ```--name-prefix```. 
@@ -50,8 +50,14 @@ Connect as device with id ```1``` using serial device ```/dev/ttyS0``` and enfor
 ```
 modbus-rtu-client-shm -d /dev/ttyS0 -i 1 --rs232
 ```
+## Install
 
-## Using the Flatpak package
+### Using the Modbus Collection Flapak Package: Shared Memory Modbus (recommended)
+[SHM-Modbus](https://nikolask-source.github.io/SHM_Modbus/) is a collection of the shared memory modbus tools.
+It is available as flatpak and published on flathub as ```network.koesling.shm-modbs```.
+
+
+### Using the Standalone Flatpak Package
 The flatpak package can be installed via the .flatpak file.
 This can be downloaded from the GitHub [projects release page](https://github.com/NikolasK-source/modbus_rtu_client_shm/releases):
 
@@ -68,7 +74,7 @@ To enable calling with ```modbus-rtu-client-shm``` [this script](https://gist.gi
 In order to be executable everywhere, the path in which the script is placed must be in the ```PATH``` environment variable.
 
 
-## Build from Source
+### Build from Source
 
 The following packages are required for building the application:
 - cmake
