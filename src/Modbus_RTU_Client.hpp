@@ -33,14 +33,14 @@ public:
      * @param mapping modbus mapping object (nullptr: an mapping object with maximum size is generated)
      */
     explicit Client(const std::string &device,
-                   int                id,
-                   char               parity,
-                   int                data_bits,
-                   int                stop_bits,
-                   int                baud,
-                   bool               rs232,
-                   bool               rs485,
-                   modbus_mapping_t  *mapping = nullptr);
+                    int                id,
+                    char               parity,
+                    int                data_bits,
+                    int                stop_bits,
+                    int                baud,
+                    bool               rs232,
+                    bool               rs485,
+                    modbus_mapping_t  *mapping = nullptr);
 
     /*! \brief destroy the modbus client
      *

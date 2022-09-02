@@ -231,14 +231,14 @@ int main(int argc, char **argv) {
     std::unique_ptr<Modbus::RTU::Client> client;
     try {
         client = std::make_unique<Modbus::RTU::Client>(args["device"].as<std::string>(),
-                                                     args["id"].as<int>(),
-                                                     PARITY,
-                                                     DATA_BITS,
-                                                     STOP_BITS,
-                                                     BAUD,
-                                                     args.count("rs232"),
-                                                     args.count("rs485"),
-                                                     mapping->get_mapping());
+                                                       args["id"].as<int>(),
+                                                       PARITY,
+                                                       DATA_BITS,
+                                                       STOP_BITS,
+                                                       BAUD,
+                                                       args.count("rs232"),
+                                                       args.count("rs485"),
+                                                       mapping->get_mapping());
         client->set_debug(args.count("monitor"));
     } catch (const std::runtime_error &e) {
         std::cerr << e.what() << std::endl;

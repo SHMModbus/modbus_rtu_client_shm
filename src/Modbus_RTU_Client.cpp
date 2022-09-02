@@ -13,14 +13,14 @@ namespace RTU {
 static constexpr int MAX_REGS = 0x10000;
 
 Client::Client(const std::string &device,
-             int                id,
-             char               parity,
-             int                data_bits,
-             int                stop_bits,
-             int                baud,
-             bool               rs232,
-             bool               rs485,
-             modbus_mapping_t  *mapping) {
+               int                id,
+               char               parity,
+               int                data_bits,
+               int                stop_bits,
+               int                baud,
+               bool               rs232,
+               bool               rs485,
+               modbus_mapping_t  *mapping) {
     // create modbus object
     modbus = modbus_new_rtu(device.c_str(), baud, parity, data_bits, stop_bits);
     if (modbus == nullptr) {
