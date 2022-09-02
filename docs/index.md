@@ -13,7 +13,7 @@ One for each register type:
 - Discrete Input Registers (AI)
 
 All registers are initialized with 0 at the beginning.
-The Modbus master reads and writes directly the values from these shared memories.
+The Modbus server reads and writes directly the values from these shared memories.
 
 The actual functionality of the client is realized by applications that read data from or write data to the shared memory.
 
@@ -24,7 +24,7 @@ The registers (AI, AO) use 10 bit per value. The user is responsible for handlin
 The application requires a serial device (```--device```) and a client id (```--id```) as arguments. All other arguments are optional.
 
 By using the command line argument ```--monitor``` all incoming and outgoing packets are printed on stdout.
-This option should be used carefully, as it generates large amounts of output depending on the masters polling cycle and the number of used registers.
+This option should be used carefully, as it generates large amounts of output depending on the Modbus servers polling cycle and the number of used registers.
 
 The client creates four shared memories and names them ```modbus_DO```, ```modbus_DI```, ```modbus_AO``` and ```modbus_AI``` by default.
 The prefix modbus_ can be changed via the argument ```--name-prefix```. 
