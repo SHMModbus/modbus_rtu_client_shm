@@ -12,6 +12,7 @@
 #include <unistd.h>
 
 #include "Modbus_RTU_Client.hpp"
+#include "Print_Time.hpp"
 #include "license.hpp"
 #include "modbus_shm.hpp"
 
@@ -265,7 +266,7 @@ int main(int argc, char **argv) {
         return EX_SOFTWARE;
     }
 
-    std::cerr << "Connected to bus." << std::endl;
+    std::cerr << Print_Time::iso << " INFO: Connected to bus." << std::endl;
 
     // ========== MAIN LOOP ========== (handle requests)
     bool connection_closed = false;
@@ -279,7 +280,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    if (connection_closed) std::cerr << "Modbus Server closed connection." << std::endl;
+    if (connection_closed) std::cerr << Print_Time::iso << " INFO: Modbus Server closed connection." << std::endl;
 
     std::cerr << "Terminating..." << std::endl;
 }
