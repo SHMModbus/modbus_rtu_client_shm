@@ -120,6 +120,7 @@ int main(int argc, char **argv) {
     options.add_options()("h,help", "print usage");
     options.add_options()("version", "print version information");
     options.add_options()("license", "show licences");
+    options.add_options()("license-full", "show licences (full license text)");
     // clang-format on
 
     // parse arguments
@@ -159,7 +160,12 @@ int main(int argc, char **argv) {
 
     // print licenses
     if (args.count("license")) {
-        print_licenses(std::cout);
+        print_licenses(std::cout, false);
+        return EX_OK;
+    }
+
+    if (args.count("license-full")) {
+        print_licenses(std::cout, false);
         return EX_OK;
     }
 
