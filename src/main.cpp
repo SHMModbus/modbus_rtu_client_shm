@@ -1,19 +1,26 @@
 /*
  * Copyright (C) 2021-2022 Nikolas Koesling <nikolas@koesling.info>.
- * This program is free software. You can redistribute it and/or modify it under the terms of the MIT License.
+ * This program is free software. You can redistribute it and/or modify it under the terms of the GPLv3 License.
  */
+
+#include "Modbus_RTU_Client.hpp"
+#include "Print_Time.hpp"
+#include "generated/version_info.hpp"
+#include "license.hpp"
+#include "modbus_shm.hpp"
 
 #include <csignal>
 #include <cxxopts.hpp>
 #include <filesystem>
 #include <iostream>
-#include <memory>
+#include <sys/ioctl.h>
+#include <sys/resource.h>
+#include <sys/signalfd.h>
 #include <sysexits.h>
 #include <unistd.h>
 
-#include "Modbus_RTU_Client.hpp"
-#include "license.hpp"
-#include "modbus_shm.hpp"
+//! Help output line width
+static constexpr std::size_t HELP_WIDTH = 120;
 
 //! terminate flag
 static volatile bool terminate = false;
@@ -78,88 +85,154 @@ int main(int argc, char **argv) {
 #endif
 
     // all command line arguments
-    options.add_options()("d,device", "mandatory: serial device", cxxopts::value<std::string>());
-    options.add_options()("i,id", "mandatory: modbus RTU client id", cxxopts::value<int>());
-    options.add_options()(
+    options.add_options("serial")("d,device", "mandatory: serial device", cxxopts::value<std::string>());
+    options.add_options("serial")("i,id", "mandatory: modbus RTU client id", cxxopts::value<int>());
+    options.add_options("serial")(
             "p,parity", "serial parity bit (N(one), E(ven), O(dd))", cxxopts::value<char>()->default_value("N"));
-    options.add_options()("data-bits", "serial data bits (5-8)", cxxopts::value<int>()->default_value("8"));
-    options.add_options()("stop-bits", "serial stop bits (1-2)", cxxopts::value<int>()->default_value("1"));
-    options.add_options()("b,baud", "serial baud", cxxopts::value<int>()->default_value("9600"));
-    options.add_options()("rs485", "force to use rs485 mode");
-    options.add_options()("rs232", "force to use rs232 mode");
-    options.add_options()(
+    options.add_options("serial")("data-bits", "serial data bits (5-8)", cxxopts::value<int>()->default_value("8"));
+    options.add_options("serial")("stop-bits", "serial stop bits (1-2)", cxxopts::value<int>()->default_value("1"));
+    options.add_options("serial")("b,baud", "serial baud", cxxopts::value<int>()->default_value("9600"));
+    options.add_options("serial")("rs485", "force to use rs485 mode");
+    options.add_options("serial")("rs232", "force to use rs232 mode");
+    options.add_options("shared memory")(
             "n,name-prefix", "shared memory name prefix", cxxopts::value<std::string>()->default_value("modbus_"));
-    options.add_options()("do-registers",
-                          "number of digital output registers",
-                          cxxopts::value<std::size_t>()->default_value("65536"));
-    options.add_options()(
+    options.add_options("modbus")("do-registers",
+                                  "number of digital output registers",
+                                  cxxopts::value<std::size_t>()->default_value("65536"));
+    options.add_options("modbus")(
             "di-registers", "number of digital input registers", cxxopts::value<std::size_t>()->default_value("65536"));
-    options.add_options()(
+    options.add_options("modbus")(
             "ao-registers", "number of analog output registers", cxxopts::value<std::size_t>()->default_value("65536"));
-    options.add_options()(
+    options.add_options("modbus")(
             "ai-registers", "number of analog input registers", cxxopts::value<std::size_t>()->default_value("65536"));
-    options.add_options()("m,monitor", "output all incoming and outgoing packets to stdout");
-    options.add_options()("byte-timeout",
-                          "timeout interval in seconds between two consecutive bytes of the same message. "
-                          "In most cases it is sufficient to set the response timeout. "
-                          "Fractional values are possible.",
-                          cxxopts::value<double>());
-    options.add_options()("response-timeout",
-                          "set the timeout interval in seconds used to wait for a response. "
-                          "When a byte timeout is set, if the elapsed time for the first byte of response is longer "
-                          "than the given timeout, a timeout is detected. "
-                          "When byte timeout is disabled, the full confirmation response must be received before "
-                          "expiration of the response timeout. "
-                          "Fractional values are possible.",
-                          cxxopts::value<double>());
-    options.add_options()("force",
-                          "Force the use of the shared memory even if it already exists. "
-                          "Do not use this option per default! "
-                          "It should only be used if the shared memory of an improperly terminated instance continues "
-                          "to exist as an orphan and is no longer used.");
-    options.add_options()("h,help", "print usage");
-    options.add_options()("version", "print version information");
-    options.add_options()("license", "show licences");
-    // clang-format on
+    options.add_options("modbus")("m,monitor", "output all incoming and outgoing packets to stdout");
+    options.add_options("modbus")("byte-timeout",
+                                  "timeout interval in seconds between two consecutive bytes of the same message. "
+                                  "In most cases it is sufficient to set the response timeout. "
+                                  "Fractional values are possible.",
+                                  cxxopts::value<double>());
+    options.add_options("modbus")(
+            "response-timeout",
+            "set the timeout interval in seconds used to wait for a response. "
+            "When a byte timeout is set, if the elapsed time for the first byte of response is longer "
+            "than the given timeout, a timeout is detected. "
+            "When byte timeout is disabled, the full confirmation response must be received before "
+            "expiration of the response timeout. "
+            "Fractional values are possible.",
+            cxxopts::value<double>());
+    options.add_options("shared memory")(
+            "force",
+            "Force the use of the shared memory even if it already exists. "
+            "Do not use this option per default! "
+            "It should only be used if the shared memory of an improperly terminated instance continues "
+            "to exist as an orphan and is no longer used.");
+    options.add_options("shared memory")("semaphore",
+                                         "protect the shared memory with a named semaphore against simultaneous access",
+                                         cxxopts::value<std::string>());
+    options.add_options("shared memory")(
+            "semaphore-force",
+            "Force the use of the semaphore even if it already exists. "
+            "Do not use this option per default! "
+            "It should only be used if the semaphore of an improperly terminated instance continues "
+            "to exist as an orphan and is no longer used.");
+    options.add_options("shared memory")("permissions",
+                                         "permission bits that are applied when creating a shared memory.",
+                                         cxxopts::value<std::string>()->default_value("0640"));
+    options.add_options("other")("h,help", "print usage");
+    options.add_options("version information")("version", "print version and exit");
+    options.add_options("version information")("longversion",
+                                               "print version (including compiler and system info) and exit");
+    options.add_options("version information")("shortversion", "print version (only version string) and exit");
+    options.add_options("version information")("git-hash", "print git hash");
+    options.add_options("other")("license", "show licences (short)");
+    options.add_options("other")("license-full", "show licences (full license text)");
 
     // parse arguments
     cxxopts::ParseResult args;
     try {
         args = options.parse(argc, argv);
     } catch (cxxopts::OptionParseException &e) {
-        std::cerr << "Failed to parse arguments: " << e.what() << '.' << std::endl;
+        std::cerr << Print_Time::iso << " ERROR: Failed to parse arguments: " << e.what() << ".'\n";
         return exit_usage();
     }
 
     // print usage
     if (args.count("help")) {
-        options.set_width(120);
-        std::cout << options.help() << std::endl;
-        std::cout << std::endl;
-        std::cout << "The modbus registers are mapped to shared memory objects:" << std::endl;
-        std::cout << "    type | name                      | mb-server-access | shm name" << std::endl;
-        std::cout << "    -----|---------------------------|------------------|----------------" << std::endl;
-        std::cout << "    DO   | Discrete Output Coils     | read-write       | <name-prefix>DO" << std::endl;
-        std::cout << "    DI   | Discrete Input Coils      | read-only        | <name-prefix>DI" << std::endl;
-        std::cout << "    AO   | Discrete Output Registers | read-write       | <name-prefix>AO" << std::endl;
-        std::cout << "    AI   | Discrete Input Registers  | read-only        | <name-prefix>AI" << std::endl;
-        std::cout << std::endl;
-        std::cout << "This application uses the following libraries:" << std::endl;
-        std::cout << "  - cxxopts by jarro2783 (https://github.com/jarro2783/cxxopts)" << std::endl;
-        std::cout << "  - libmodbus by Stéphane Raimbault (https://github.com/stephane/libmodbus)" << std::endl;
-        exit(EX_OK);
+        options.set_width(HELP_WIDTH);
+#ifdef OS_LINUX
+        if (isatty(STDIN_FILENO)) {
+            struct winsize w {};
+            if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &w) != -1) {  // NOLINT
+                static constexpr auto MIN_TTY_SIZE = static_cast<decltype(w.ws_col)>(80);
+                options.set_width(std::max(MIN_TTY_SIZE, w.ws_col));
+            }
+        }
+#endif
+
+        std::cout << options.help() << '\n';
+        std::cout << '\n';
+        std::cout << "The modbus registers are mapped to shared memory objects:" << '\n';
+        std::cout << "    type | name                      | mb-server-access | shm name" << '\n';
+        std::cout << "    -----|---------------------------|------------------|----------------" << '\n';
+        std::cout << "    DO   | Discrete Output Coils     | read-write       | <name-prefix>DO" << '\n';
+        std::cout << "    DI   | Discrete Input Coils      | read-only        | <name-prefix>DI" << '\n';
+        std::cout << "    AO   | Discrete Output Registers | read-write       | <name-prefix>AO" << '\n';
+        std::cout << "    AI   | Discrete Input Registers  | read-only        | <name-prefix>AI" << '\n';
+        std::cout << '\n';
+        std::cout << "This application uses the following libraries:" << '\n';
+        std::cout << "  - cxxopts by jarro2783 (https://github.com/jarro2783/cxxopts)" << '\n';
+        std::cout << "  - libmodbus by Stéphane Raimbault (https://github.com/stephane/libmodbus)" << '\n';
+        std::cout << "  - cxxshm (https://github.com/NikolasK-source/cxxshm)" << '\n';
+        std::cout << "  - cxxsemaphore (https://github.com/NikolasK-source/cxxsemaphore)" << '\n';
+        return EX_OK;
     }
 
     // print version
-    if (args.count("version")) {
+    if (args.count("longversion")) {
         std::cout << PROJECT_NAME << ' ' << PROJECT_VERSION << " (compiled with " << COMPILER_INFO << " on "
-                  << SYSTEM_INFO << ')' << std::endl;
+                  << SYSTEM_INFO << ')'
+#ifndef OS_LINUX
+                  << "-nonlinux"
+#endif
+                  << '\n';
+        return EX_OK;
+    }
+
+    if (args.count("shortversion")) {
+        std::cout << PROJECT_VERSION << '\n';
+        return EX_OK;
+    }
+
+    if (args.count("version")) {
+        std::cout << PROJECT_NAME << ' ' << PROJECT_VERSION << '\n';
+        return EX_OK;
+    }
+
+    if (args.count("longversion")) {
+        std::cout << PROJECT_NAME << ' ' << PROJECT_VERSION << '\n';
+        std::cout << "   compiled with " << COMPILER_INFO << '\n';
+        std::cout << "   on system " << SYSTEM_INFO
+#ifndef OS_LINUX
+                  << "-nonlinux"
+#endif
+                  << '\n';
+        std::cout << "   from git commit " << RCS_HASH << '\n';
+        return EX_OK;
+    }
+
+    if (args.count("git-hash")) {
+        std::cout << RCS_HASH << '\n';
         return EX_OK;
     }
 
     // print licenses
     if (args.count("license")) {
-        print_licenses(std::cout);
+        print_licenses(std::cout, false);
+        return EX_OK;
+    }
+
+    if (args.count("license-full")) {
+        print_licenses(std::cout, false);
         return EX_OK;
     }
 
@@ -213,6 +286,24 @@ int main(int argc, char **argv) {
         return exit_usage();
     }
 
+    // SHM permissions
+    mode_t shm_permissions = 0660;
+    {
+        const auto  shm_permissions_str = args["permissions"].as<std::string>();
+        bool        fail                = false;
+        std::size_t idx                 = 0;
+        try {
+            shm_permissions = std::stoul(shm_permissions_str, &idx, 0);
+        } catch (const std::exception &) { fail = true; }
+        fail = fail || idx != shm_permissions_str.size();
+
+        if (fail || (~static_cast<mode_t>(0x1FF) & shm_permissions) != 0) {
+            std::cerr << Print_Time::iso << " ERROR: Invalid file permissions \"" << shm_permissions_str << '"'
+                      << std::endl;
+            return EX_USAGE;
+        }
+    }
+
     // create shared memory object for modbus registers
     std::unique_ptr<Modbus::shm::Shm_Mapping> mapping;
     try {
@@ -221,7 +312,8 @@ int main(int argc, char **argv) {
                                                              args["ao-registers"].as<std::size_t>(),
                                                              args["ai-registers"].as<std::size_t>(),
                                                              args["name-prefix"].as<std::string>(),
-                                                             args.count("force") > 0);
+                                                             args.count("force") > 0,
+                                                             shm_permissions);
     } catch (const std::system_error &e) {
         std::cerr << e.what() << std::endl;
         return EX_OSERR;
@@ -259,7 +351,17 @@ int main(int argc, char **argv) {
         return EX_SOFTWARE;
     }
 
-    std::cerr << "Connected to bus." << std::endl;
+    // add semaphore if required
+    try {
+        if (args.count("semaphore")) {
+            client->enable_semaphore(args["semaphore"].as<std::string>(), args.count("semaphore-force"));
+        }
+    } catch (const std::system_error &e) {
+        std::cerr << Print_Time::iso << " ERROR: " << e.what() << std::endl;
+        return EX_SOFTWARE;
+    }
+
+    std::cerr << Print_Time::iso << " INFO: Connected to bus." << std::endl;
 
     // ========== MAIN LOOP ========== (handle requests)
     bool connection_closed = false;
@@ -273,7 +375,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    if (connection_closed) std::cerr << "Modbus Server closed connection." << std::endl;
+    if (connection_closed) std::cerr << Print_Time::iso << " INFO: Modbus Server closed connection." << std::endl;
 
     std::cerr << "Terminating..." << std::endl;
 }

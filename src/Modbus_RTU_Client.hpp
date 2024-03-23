@@ -1,10 +1,12 @@
 /*
  * Copyright (C) 2021-2022 Nikolas Koesling <nikolas@koesling.info>.
- * This program is free software. You can redistribute it and/or modify it under the terms of the MIT License.
+ * This program is free software. You can redistribute it and/or modify it under the terms of the GPLv3 License.
  */
 
 #pragma once
 
+#include <cxxsemaphore.hpp>
+#include <memory>
 #include <modbus/modbus.h>
 #include <string>
 
@@ -18,6 +20,10 @@ private:
     modbus_mapping_t *mapping;         //!< modbus data object (see libmodbus library)
     bool              delete_mapping;  //!< indicates whether the mapping object was created by this instance
     int               socket = -1;     //!< internal modbus communication socket
+
+    std::unique_ptr<cxxsemaphore::Semaphore> semaphore;
+
+    long semaphore_error_counter = 0;
 
 public:
     /*! \brief create modbus client (TCP server)
@@ -52,6 +58,14 @@ public:
      * @param debug true: enable debug output
      */
     void set_debug(bool debug);
+
+    /**
+     * @brief use the semaphore mechanism
+     *
+     * @param name name of the shared
+     * @param force use the semaphore even if it already exists
+     */
+    void enable_semaphore(const std::string &name, bool force = false);
 
     /*! \brief wait for request from Modbus Server and generate reply
      *

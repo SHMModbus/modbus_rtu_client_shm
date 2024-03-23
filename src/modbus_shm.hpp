@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2021-2022 Nikolas Koesling <nikolas@koesling.info>.
- * This program is free software. You can redistribute it and/or modify it under the terms of the MIT License.
+ * This program is free software. You can redistribute it and/or modify it under the terms of the GPLv3 License.
  */
 
 #pragma once
@@ -9,11 +9,12 @@
 #include "modbus/modbus.h"
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <string>
 
-namespace Modbus {
-namespace shm {
+
+namespace Modbus::shm {
 
 /*! \brief class that creates a modbus_mapping_t object that uses shared memory (shm) objects.
  *
@@ -21,7 +22,7 @@ namespace shm {
  */
 class Shm_Mapping final {
 private:
-    enum reg_index_t : std::size_t { DO, DI, AO, AI, REG_COUNT };
+    enum reg_index_t : std::uint8_t { DO, DI, AO, AI, REG_COUNT };
 
     //! data for a shared memory object
     struct shm_data_t {
@@ -53,15 +54,22 @@ public:
      * @param nb_input_registers number of analog input registers (AI)
      * @param shm_name_prefix name prefix of the created shared memory object
      * @param force do not fail if the shared memory exist, but use the existing shared memory
+     * @param permissions shared memory file permissions
      */
     Shm_Mapping(std::size_t        nb_bits,
                 std::size_t        nb_input_bits,
                 std::size_t        nb_registers,
                 std::size_t        nb_input_registers,
-                const std::string &shm_name_prefix = "modbus_",
-                bool               force           = false);
+                const std::string &shm_name_prefix,
+                bool               force,
+                mode_t             permissions);
 
     ~Shm_Mapping() = default;
+
+    Shm_Mapping(const Shm_Mapping &other)            = delete;
+    Shm_Mapping(Shm_Mapping &&other)                 = delete;
+    Shm_Mapping &operator=(const Shm_Mapping &other) = delete;
+    Shm_Mapping &operator=(Shm_Mapping &&other)      = delete;
 
     /*! \brief get a pointer to the created modbus_mapping_t object
      *
@@ -70,5 +78,4 @@ public:
     modbus_mapping_t *get_mapping() { return &mapping; }
 };
 
-}  // namespace shm
-}  // namespace Modbus
+}  // namespace Modbus::shm
