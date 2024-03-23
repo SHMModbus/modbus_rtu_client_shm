@@ -12,6 +12,7 @@
 #include <unistd.h>
 
 #include "Modbus_RTU_Client.hpp"
+#include "Print_Time.hpp"
 #include "license.hpp"
 #include "modbus_shm.hpp"
 
@@ -116,6 +117,14 @@ int main(int argc, char **argv) {
                           "Force the use of the shared memory even if it already exists. "
                           "Do not use this option per default! "
                           "It should only be used if the shared memory of an improperly terminated instance continues "
+                          "to exist as an orphan and is no longer used.");
+    options.add_options()("semaphore",
+                          "protect the shared memory with a named semaphore against simultaneous access",
+                          cxxopts::value<std::string>());
+    options.add_options()("semaphore-force",
+                          "Force the use of the semaphore even if it already exists. "
+                          "Do not use this option per default! "
+                          "It should only be used if the semaphore of an improperly terminated instance continues "
                           "to exist as an orphan and is no longer used.");
     options.add_options()("h,help", "print usage");
     options.add_options()("version", "print version information");
@@ -265,7 +274,17 @@ int main(int argc, char **argv) {
         return EX_SOFTWARE;
     }
 
-    std::cerr << "Connected to bus." << std::endl;
+    // add semaphore if required
+    try {
+        if (args.count("semaphore")) {
+            client->enable_semaphore(args["semaphore"].as<std::string>(), args.count("semaphore-force"));
+        }
+    } catch (const std::system_error &e) {
+        std::cerr << Print_Time::iso << " ERROR: " << e.what() << std::endl;
+        return EX_SOFTWARE;
+    }
+
+    std::cerr << Print_Time::iso << " INFO: Connected to bus." << std::endl;
 
     // ========== MAIN LOOP ========== (handle requests)
     bool connection_closed = false;
@@ -279,7 +298,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    if (connection_closed) std::cerr << "Modbus Server closed connection." << std::endl;
+    if (connection_closed) std::cerr << Print_Time::iso << " INFO: Modbus Server closed connection." << std::endl;
 
     std::cerr << "Terminating..." << std::endl;
 }

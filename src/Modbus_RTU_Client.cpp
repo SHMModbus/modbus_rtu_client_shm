@@ -4,13 +4,29 @@
  */
 
 #include "Modbus_RTU_Client.hpp"
+#include "Print_Time.hpp"
 
+#include <iostream>
 #include <stdexcept>
+
 
 namespace Modbus {
 namespace RTU {
 
 static constexpr int MAX_REGS = 0x10000;
+
+//* maximum time to wait for semaphore (100ms)
+static constexpr struct timespec SEMAPHORE_MAX_TIME = {0, 100'000};
+
+//* value to increment error counter if semaphore could not be acquired
+static constexpr long SEMAPHORE_ERROR_INC = 10;
+
+//* value to decrement error counter if semaphore could be acquired
+static constexpr long SEMAPHORE_ERROR_DEC = 1;
+
+//* maximum value of semaphore error counter
+static constexpr long SEMAPHORE_ERROR_MAX = 1000;
+
 
 Client::Client(const std::string &device,
                int                id,
@@ -86,6 +102,12 @@ void Client::set_debug(bool debug) {
     }
 }
 
+void Client::enable_semaphore(const std::string &name, bool force) {
+    if (semaphore) throw std::logic_error("semaphore already enabled");
+
+    semaphore = std::make_unique<cxxsemaphore::Semaphore>(name, 1, force);
+}
+
 bool Client::handle_request() {
     // receive modbus request
     uint8_t query[MODBUS_TCP_MAX_ADU_LENGTH];
@@ -93,7 +115,22 @@ bool Client::handle_request() {
 
     if (rc > 0) {
         // handle request
+        if (semaphore) {
+            if (!semaphore->wait(SEMAPHORE_MAX_TIME)) {
+                std::cerr << Print_Time::iso << " WARNING: Failed to acquire semaphore '" << semaphore->get_name()
+                          << "' within 100ms." << std::endl;
+
+                semaphore_error_counter += SEMAPHORE_ERROR_INC;
+
+                if (semaphore_error_counter >= SEMAPHORE_ERROR_MAX)
+                    throw std::runtime_error("Repeatedly failed to acquire the semaphore");
+            } else {
+                semaphore_error_counter -= SEMAPHORE_ERROR_DEC;
+                if (semaphore_error_counter < 0) semaphore_error_counter = 0;
+            }
+        }
         modbus_reply(modbus, query, rc, mapping);
+        if (semaphore && semaphore->is_acquired()) semaphore->post();
     } else if (rc == -1) {
         if (errno == ECONNRESET) return true;
 
