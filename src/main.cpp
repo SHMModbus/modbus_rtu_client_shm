@@ -151,7 +151,7 @@ int main(int argc, char **argv) {
     cxxopts::ParseResult args;
     try {
         args = options.parse(argc, argv);
-    } catch (cxxopts::OptionParseException &e) {
+    } catch (cxxopts::exceptions::parsing::exception &e) {
         std::cerr << Print_Time::iso << " ERROR: Failed to parse arguments: " << e.what() << ".'\n";
         return exit_usage();
     }
@@ -335,7 +335,7 @@ int main(int argc, char **argv) {
     } catch (const std::runtime_error &e) {
         std::cerr << e.what() << std::endl;
         return EX_SOFTWARE;
-    } catch (cxxopts::option_has_no_value_exception &e) {
+    } catch (cxxopts::exceptions::option_has_no_value::exception &e) {
         std::cerr << e.what() << std::endl;
         return exit_usage();
     }
