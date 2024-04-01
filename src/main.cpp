@@ -22,11 +22,14 @@
 //! Help output line width
 static constexpr std::size_t HELP_WIDTH = 120;
 
+//! Max number of modbus registers
+static constexpr std::size_t MAX_MODBUS_REGISTERS = 0x10000;
+
 //! terminate flag
-static volatile bool terminate = false;
+static volatile bool terminate = false;  // NOLINT
 
 //! modbus socket (to be closed if termination is requested)
-static int socket = -1;
+static int socket = -1;  // NOLINT
 
 /*! \brief signal handler (SIGINT and SIGTERM)
  *
@@ -54,23 +57,23 @@ constexpr std::array<int, 10> TERM_SIGNALS = {SIGINT,
  * @return exit code
  */
 int main(int argc, char **argv) {
-    const std::string exe_name = std::filesystem::path(argv[0]).filename().string();
+    const std::string exe_name = std::filesystem::path(*argv).filename().string();
     cxxopts::Options  options(exe_name, "Modbus client that uses shared memory objects to store its register values");
 
     auto exit_usage = [&exe_name]() {
-        std::cerr << "Use '" << exe_name << " --help' for more information." << std::endl;
+        std::cerr << "Use '" << exe_name << " --help' for more information." << '\n';
         return EX_USAGE;
     };
 
     auto euid = geteuid();
-    if (!euid) std::cerr << "!!!! WARNING: You should not execute this program with root privileges !!!!" << std::endl;
+    if (!euid) std::cerr << "!!!! WARNING: You should not execute this program with root privileges !!!!" << '\n';
 
 #ifdef COMPILER_CLANG
 #    pragma clang diagnostic push
 #    pragma clang diagnostic ignored "-Wdisabled-macro-expansion"
 #endif
     // establish signal handler
-    struct sigaction term_sa;
+    struct sigaction term_sa {};
     term_sa.sa_handler = sig_term_handler;
     term_sa.sa_flags   = SA_RESTART;
     sigemptyset(&term_sa.sa_mask);
@@ -151,7 +154,7 @@ int main(int argc, char **argv) {
     cxxopts::ParseResult args;
     try {
         args = options.parse(argc, argv);
-    } catch (cxxopts::OptionParseException &e) {
+    } catch (cxxopts::exceptions::parsing::exception &e) {
         std::cerr << Print_Time::iso << " ERROR: Failed to parse arguments: " << e.what() << ".'\n";
         return exit_usage();
     }
@@ -237,69 +240,73 @@ int main(int argc, char **argv) {
     }
 
     // check arguments
-    if (args["do-registers"].as<std::size_t>() > 0x10000) {
-        std::cerr << "to many do_registers (maximum: 65536)." << std::endl;
+    if (args["do-registers"].as<std::size_t>() > MAX_MODBUS_REGISTERS) {
+        std::cerr << "to many do_registers (maximum: 65536)." << '\n';
         return exit_usage();
     }
 
-    if (args["di-registers"].as<std::size_t>() > 0x10000) {
-        std::cerr << "to many do_registers (maximum: 65536)." << std::endl;
+    if (args["di-registers"].as<std::size_t>() > MAX_MODBUS_REGISTERS) {
+        std::cerr << "to many do_registers (maximum: 65536)." << '\n';
         return exit_usage();
     }
 
-    if (args["ao-registers"].as<std::size_t>() > 0x10000) {
-        std::cerr << "to many do_registers (maximum: 65536)." << std::endl;
+    if (args["ao-registers"].as<std::size_t>() > MAX_MODBUS_REGISTERS) {
+        std::cerr << "to many do_registers (maximum: 65536)." << '\n';
         return exit_usage();
     }
 
-    if (args["ai-registers"].as<std::size_t>() > 0x10000) {
-        std::cerr << "to many do_registers (maximum: 65536)." << std::endl;
+    if (args["ai-registers"].as<std::size_t>() > MAX_MODBUS_REGISTERS) {
+        std::cerr << "to many do_registers (maximum: 65536)." << '\n';
         return exit_usage();
     }
 
     const auto PARITY = toupper(args["parity"].as<char>());
     if (PARITY != 'N' && PARITY != 'E' && PARITY != 'O') {
-        std::cerr << "invalid parity" << std::endl;
+        std::cerr << "invalid parity" << '\n';
         return exit_usage();
     }
 
-    const auto DATA_BITS = toupper(args["data-bits"].as<int>());
-    if (DATA_BITS < 5 || DATA_BITS > 8) {
-        std::cerr << "data-bits out of range" << std::endl;
+    static constexpr int MIN_DATA_BITS = 5;
+    static constexpr int MAX_DATA_BITS = 8;
+    const auto           DATA_BITS     = toupper(args["data-bits"].as<int>());
+    if (DATA_BITS < MIN_DATA_BITS || DATA_BITS > MAX_DATA_BITS) {
+        std::cerr << "data-bits out of range" << '\n';
         return exit_usage();
     }
 
-    const auto STOP_BITS = toupper(args["stop-bits"].as<int>());
-    if (STOP_BITS < 1 || STOP_BITS > 2) {
-        std::cerr << "stop-bits out of range" << std::endl;
+    static constexpr int MIN_STOP_BITS = 1;
+    static constexpr int MAX_STOP_BITS = 2;
+    const auto           STOP_BITS     = toupper(args["stop-bits"].as<int>());
+    if (STOP_BITS < MIN_STOP_BITS || STOP_BITS > MAX_STOP_BITS) {
+        std::cerr << "stop-bits out of range" << '\n';
         return exit_usage();
     }
 
     const auto BAUD = toupper(args["baud"].as<int>());
     if (BAUD < 1) {
-        std::cerr << "invalid baud rate" << std::endl;
+        std::cerr << "invalid baud rate" << '\n';
         return exit_usage();
     }
 
     if (args["rs232"].count() && args["rs485"].count()) {
-        std::cerr << "Cannot operate in RS232 and RS485 mode at the same time." << std::endl;
+        std::cerr << "Cannot operate in RS232 and RS485 mode at the same time." << '\n';
         return exit_usage();
     }
 
     // SHM permissions
-    mode_t shm_permissions = 0660;
+    static constexpr mode_t DEFAULT_SHM_PERMISSIONS = 0660;
+    mode_t                  shm_permissions         = DEFAULT_SHM_PERMISSIONS;
     {
         const auto  shm_permissions_str = args["permissions"].as<std::string>();
         bool        fail                = false;
         std::size_t idx                 = 0;
         try {
-            shm_permissions = std::stoul(shm_permissions_str, &idx, 0);
+            shm_permissions = static_cast<decltype(shm_permissions)>(std::stoul(shm_permissions_str, &idx, 0));
         } catch (const std::exception &) { fail = true; }
         fail = fail || idx != shm_permissions_str.size();
 
-        if (fail || (~static_cast<mode_t>(0x1FF) & shm_permissions) != 0) {
-            std::cerr << Print_Time::iso << " ERROR: Invalid file permissions \"" << shm_permissions_str << '"'
-                      << std::endl;
+        if (fail || (~static_cast<mode_t>(0x1FF) & shm_permissions) != 0) {  // NOLINT
+            std::cerr << Print_Time::iso << " ERROR: Invalid file permissions \"" << shm_permissions_str << '"' << '\n';
             return EX_USAGE;
         }
     }
@@ -315,7 +322,7 @@ int main(int argc, char **argv) {
                                                              args.count("force") > 0,
                                                              shm_permissions);
     } catch (const std::system_error &e) {
-        std::cerr << e.what() << std::endl;
+        std::cerr << e.what() << '\n';
         return EX_OSERR;
     }
 
@@ -333,10 +340,10 @@ int main(int argc, char **argv) {
                                                        mapping->get_mapping());
         client->set_debug(args.count("monitor"));
     } catch (const std::runtime_error &e) {
-        std::cerr << e.what() << std::endl;
+        std::cerr << e.what() << '\n';
         return EX_SOFTWARE;
-    } catch (cxxopts::option_has_no_value_exception &e) {
-        std::cerr << e.what() << std::endl;
+    } catch (cxxopts::exceptions::option_has_no_value::exception &e) {
+        std::cerr << e.what() << '\n';
         return exit_usage();
     }
     socket = client->get_socket();
@@ -347,7 +354,7 @@ int main(int argc, char **argv) {
 
         if (args.count("byte-timeout")) { client->set_byte_timeout(args["byte-timeout"].as<double>()); }
     } catch (const std::runtime_error &e) {
-        std::cerr << e.what() << std::endl;
+        std::cerr << e.what() << '\n';
         return EX_SOFTWARE;
     }
 
@@ -357,11 +364,11 @@ int main(int argc, char **argv) {
             client->enable_semaphore(args["semaphore"].as<std::string>(), args.count("semaphore-force"));
         }
     } catch (const std::system_error &e) {
-        std::cerr << Print_Time::iso << " ERROR: " << e.what() << std::endl;
+        std::cerr << Print_Time::iso << " ERROR: " << e.what() << '\n';
         return EX_SOFTWARE;
     }
 
-    std::cerr << Print_Time::iso << " INFO: Connected to bus." << std::endl;
+    std::cerr << Print_Time::iso << " INFO: Connected to bus." << '\n';
 
     // ========== MAIN LOOP ========== (handle requests)
     bool connection_closed = false;
@@ -370,12 +377,12 @@ int main(int argc, char **argv) {
             connection_closed = client->handle_request();
         } catch (const std::runtime_error &e) {
             // clang-tidy (LLVM 12.0.1) warning "Condition is always true" is not correct
-            if (!terminate) std::cerr << e.what() << std::endl;
+            if (!terminate) std::cerr << e.what() << '\n';
             break;
         }
     }
 
-    if (connection_closed) std::cerr << Print_Time::iso << " INFO: Modbus Server closed connection." << std::endl;
+    if (connection_closed) std::cerr << Print_Time::iso << " INFO: Modbus Server closed connection." << '\n';
 
-    std::cerr << "Terminating..." << std::endl;
+    std::cerr << "Terminating..." << '\n';
 }

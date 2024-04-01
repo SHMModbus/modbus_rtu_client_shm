@@ -6,12 +6,12 @@
 #include "Modbus_RTU_Client.hpp"
 #include "Print_Time.hpp"
 
+#include <array>
 #include <iostream>
 #include <stdexcept>
 
 
-namespace Modbus {
-namespace RTU {
+namespace Modbus::RTU {
 
 static constexpr int MAX_REGS = 0x10000;
 
@@ -29,16 +29,16 @@ static constexpr long SEMAPHORE_ERROR_MAX = 1000;
 
 
 Client::Client(const std::string &device,
-               int                id,
-               char               parity,
-               int                data_bits,
-               int                stop_bits,
-               int                baud,
+               int                id,         // NOLINT
+               char               parity,     // NOLINT
+               int                data_bits,  // NOLINT
+               int                stop_bits,  // NOLINT
+               int                baud,       // NOLINT
                bool               rs232,
                bool               rs485,
                modbus_mapping_t  *mapping) {
     // create modbus object
-    modbus = modbus_new_rtu(device.c_str(), baud, parity, data_bits, stop_bits);
+    modbus = modbus_new_rtu(device.c_str(), baud, parity, data_bits, stop_bits);  // NOLINT
     if (modbus == nullptr) {
         const std::string error_msg = modbus_strerror(errno);
         throw std::runtime_error("failed to create modbus instance: " + error_msg);
@@ -110,15 +110,15 @@ void Client::enable_semaphore(const std::string &name, bool force) {
 
 bool Client::handle_request() {
     // receive modbus request
-    uint8_t query[MODBUS_TCP_MAX_ADU_LENGTH];
-    int     rc = modbus_receive(modbus, query);
+    std::array<uint8_t, MODBUS_RTU_MAX_ADU_LENGTH> query {};
+    int                                            rc = modbus_receive(modbus, query.data());
 
     if (rc > 0) {
         // handle request
         if (semaphore) {
             if (!semaphore->wait(SEMAPHORE_MAX_TIME)) {
                 std::cerr << Print_Time::iso << " WARNING: Failed to acquire semaphore '" << semaphore->get_name()
-                          << "' within 100ms." << std::endl;
+                          << "' within 100ms." << std::endl;  // NOLINT
 
                 semaphore_error_counter += SEMAPHORE_ERROR_INC;
 
@@ -129,7 +129,7 @@ bool Client::handle_request() {
                 if (semaphore_error_counter < 0) semaphore_error_counter = 0;
             }
         }
-        modbus_reply(modbus, query, rc, mapping);
+        modbus_reply(modbus, query.data(), rc, mapping);
         if (semaphore && semaphore->is_acquired()) semaphore->post();
     } else if (rc == -1) {
         if (errno == ECONNRESET) return true;
@@ -152,7 +152,7 @@ static inline timeout_t double_to_timeout_t(double timeout) {
     ret.sec = static_cast<uint32_t>(timeout);
 
     double fractional = timeout - static_cast<double>(ret.sec);
-    ret.usec          = static_cast<uint32_t>(fractional * 1000.0 * 1000.0);
+    ret.usec          = static_cast<uint32_t>(fractional * 1000.0 * 1000.0);  // NOLINT
 
     return ret;
 }
@@ -187,7 +187,7 @@ double Client::get_byte_timeout() {
         throw std::runtime_error("modbus_receive failed: " + error_msg + ' ' + std::to_string(errno));
     }
 
-    return static_cast<double>(timeout.sec) + (static_cast<double>(timeout.usec) / (1000.0 * 1000.0));
+    return static_cast<double>(timeout.sec) + (static_cast<double>(timeout.usec) / (1000.0 * 1000.0));  // NOLINT
 }
 
 double Client::get_response_timeout() {
@@ -200,8 +200,7 @@ double Client::get_response_timeout() {
         throw std::runtime_error("modbus_receive failed: " + error_msg + ' ' + std::to_string(errno));
     }
 
-    return static_cast<double>(timeout.sec) + (static_cast<double>(timeout.usec) / (1000.0 * 1000.0));
+    return static_cast<double>(timeout.sec) + (static_cast<double>(timeout.usec) / (1000.0 * 1000.0));  // NOLINT
 }
 
-}  // namespace RTU
-}  // namespace Modbus
+}  // namespace Modbus::RTU
