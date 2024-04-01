@@ -2,17 +2,23 @@
 
 Modbus RTU client that stores its data (registers) in shared memory objects.
 
+## Dependencies
+- cxxopts by jarro2783 (https://github.com/jarro2783/cxxopts) (only required for building the application)
+- libmodbus by Stéphane Raimbault (https://github.com/stephane/libmodbus)
+- cxxshm (https://github.com/NikolasK-source/cxxshm)
+- cxxsemaphore (https://github.com/NikolasK-source/cxxsemaphore)
+
+On Arch linux they are available via the official repositories and the AUR:
+- https://archlinux.org/packages/extra/any/cxxopts/
+- https://aur.archlinux.org/packages/libmodbus
+- https://aur.archlinux.org/packages/cxxshm
+- https://aur.archlinux.org/packages/cxxsemaphore
+
 ## Build
 ```
-git submodule init
-git submodule update
-mkdir build
-cd build
-cmake .. -DCMAKE_CXX_COMPILER=$(which clang++) -DCMAKE_BUILD_TYPE=Release -DCLANG_FORMAT=OFF -DCOMPILER_WARNINGS=OFF
-cmake --build . 
+cmake -B build -DCMAKE_CXX_COMPILER=$(which clang++) -DCMAKE_BUILD_TYPE=Release -DCLANG_FORMAT=OFF -DCLANG_TIDY=OFF -DCOMPILER_WARNINGS=OFF -DBUILD_DOC=OFF
+cmake --build .
 ```
-
-As an alternative to the ```git submodule``` commands, the ```--recursive``` option can be used with ```git clone```.
 
 ## Use
 ```
@@ -54,8 +60,3 @@ The modbus registers are mapped to shared memory objects:
     AO   | Discrete Output Registers | read-write       | <name-prefix>AO
     AI   | Discrete Input Registers  | read-only        | <name-prefix>AI
 ```
-
-## Libraries
-This application uses the following libraries:
-- cxxopts by jarro2783 (https://github.com/jarro2783/cxxopts)
-- libmodbus by Stéphane Raimbault (https://github.com/stephane/libmodbus)
