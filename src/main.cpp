@@ -19,9 +19,6 @@
 #include <sysexits.h>
 #include <unistd.h>
 
-//! Help output line width
-static constexpr std::size_t HELP_WIDTH = 120;
-
 //! Max number of modbus registers
 static constexpr std::size_t MAX_MODBUS_REGISTERS = 0x10000;
 
@@ -161,7 +158,15 @@ int main(int argc, char **argv) {
 
     // print usage
     if (args.count("help")) {
-        options.set_width(HELP_WIDTH);
+        static constexpr std::size_t MIN_HELP_SIZE = 80;
+        if (isatty(STDIN_FILENO)) {
+            struct winsize w {};
+            if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &w) != -1) {  // NOLINT
+                options.set_width(std::max(static_cast<decltype(w.ws_col)>(MIN_HELP_SIZE), w.ws_col));
+            }
+        } else {
+            options.set_width(MIN_HELP_SIZE);
+        }
 #ifdef OS_LINUX
         if (isatty(STDIN_FILENO)) {
             struct winsize w {};
@@ -191,16 +196,6 @@ int main(int argc, char **argv) {
     }
 
     // print version
-    if (args.count("longversion")) {
-        std::cout << PROJECT_NAME << ' ' << PROJECT_VERSION << " (compiled with " << COMPILER_INFO << " on "
-                  << SYSTEM_INFO << ')'
-#ifndef OS_LINUX
-                  << "-nonlinux"
-#endif
-                  << '\n';
-        return EX_OK;
-    }
-
     if (args.count("shortversion")) {
         std::cout << PROJECT_VERSION << '\n';
         return EX_OK;
