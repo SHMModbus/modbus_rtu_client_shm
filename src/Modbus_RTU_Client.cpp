@@ -16,7 +16,7 @@ namespace Modbus::RTU {
 static constexpr int MAX_REGS = 0x10000;
 
 //* maximum time to wait for semaphore (100ms)
-static constexpr struct timespec SEMAPHORE_MAX_TIME = {0, 100'000};
+static constexpr struct timespec SEMAPHORE_MAX_TIME = {.tv_sec = 0, .tv_nsec = 100'000};
 
 //* value to increment error counter if semaphore could not be acquired
 static constexpr long SEMAPHORE_ERROR_INC = 10;
@@ -108,7 +108,7 @@ void Client::enable_semaphore(const std::string &name, bool force) {
     semaphore = std::make_unique<cxxsemaphore::Semaphore>(name, 1, force);
 }
 
-bool Client::handle_request() {
+bool Client::handle_request(void (*mb_function_callback)(uint8_t mb_function_code)) {
     // receive modbus request
     std::array<uint8_t, MODBUS_RTU_MAX_ADU_LENGTH> query {};
     int                                            rc = modbus_receive(modbus, query.data());
@@ -130,6 +130,12 @@ bool Client::handle_request() {
             }
         }
         modbus_reply(modbus, query.data(), rc, mapping);
+
+        if (mb_function_callback) {
+            const auto FUNCTION_CODE = query[7];
+            mb_function_callback(FUNCTION_CODE);
+        }
+
         if (semaphore && semaphore->is_acquired()) semaphore->post();
     } else if (rc == -1) {
         if (errno == ECONNRESET) return true;
