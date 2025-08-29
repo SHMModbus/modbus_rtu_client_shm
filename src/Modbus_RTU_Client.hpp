@@ -71,7 +71,7 @@ public:
      *
      * @return true: connection closed
      */
-    bool handle_request();
+    bool handle_request(void (*mb_function_callback)(uint8_t mb_function_code) = nullptr);
 
     /*!
      * \brief set byte timeout

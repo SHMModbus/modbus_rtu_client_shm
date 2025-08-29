@@ -3,6 +3,7 @@
  * This program is free software. You can redistribute it and/or modify it under the terms of the GPLv3 License.
  */
 
+#include "Mb_Proc_Signal.hpp"
 #include "Modbus_RTU_Client.hpp"
 #include "Print_Time.hpp"
 #include "generated/version_info.hpp"
@@ -11,11 +12,11 @@
 
 #include <csignal>
 #include <cxxopts.hpp>
+#include <cxxsemaphore_version_info.hpp>
+#include <cxxshm_version_info.hpp>
 #include <filesystem>
 #include <iostream>
 #include <sys/ioctl.h>
-#include <sys/resource.h>
-#include <sys/signalfd.h>
 #include <sysexits.h>
 #include <unistd.h>
 
@@ -36,16 +37,27 @@ static void sig_term_handler(int) {
     terminate = true;
 }
 
-constexpr std::array<int, 10> TERM_SIGNALS = {SIGINT,
-                                              SIGTERM,
-                                              SIGHUP,
-                                              SIGIO,  // should not happen
-                                              SIGPIPE,
-                                              SIGPOLL,  // should not happen
-                                              SIGPROF,  // should not happen
-                                              SIGUSR1,
-                                              SIGUSR2,
-                                              SIGVTALRM};
+static void sig_usr1_handler(int, siginfo_t *info, void *) {
+    const auto pid = info->si_pid;
+    try {
+        Mb_Proc_Signal::get_instance().add_process(pid);
+        std::cerr << Print_Time::iso << " INFO: process " << pid
+                  << " registered for SIGUSR1 on writing modbus commands\n";
+    } catch (const std::runtime_error &err) {
+        std::cerr << Print_Time::iso << " WARNING: process " << pid << " registered for SIGUSR1: " << err.what()
+                  << "\n";
+    }
+}
+
+constexpr std::array<int, 9> TERM_SIGNALS = {SIGINT,
+                                             SIGTERM,
+                                             SIGHUP,
+                                             SIGIO,  // should not happen
+                                             SIGPIPE,
+                                             SIGPOLL,  // should not happen
+                                             SIGPROF,  // should not happen
+                                             SIGUSR2,
+                                             SIGVTALRM};
 
 /*! \brief main function
  *
@@ -64,25 +76,6 @@ int main(int argc, char **argv) {
 
     auto euid = geteuid();
     if (!euid) std::cerr << "!!!! WARNING: You should not execute this program with root privileges !!!!" << '\n';
-
-#ifdef COMPILER_CLANG
-#    pragma clang diagnostic push
-#    pragma clang diagnostic ignored "-Wdisabled-macro-expansion"
-#endif
-    // establish signal handler
-    struct sigaction term_sa {};
-    term_sa.sa_handler = sig_term_handler;
-    term_sa.sa_flags   = SA_RESTART;
-    sigemptyset(&term_sa.sa_mask);
-    for (const auto SIGNO : TERM_SIGNALS) {
-        if (sigaction(SIGNO, &term_sa, nullptr)) {
-            perror("Failed to establish signal handler");
-            return EX_OSERR;
-        }
-    }
-#ifdef COMPILER_CLANG
-#    pragma clang diagnostic pop
-#endif
 
     // all command line arguments
     options.add_options("serial")("d,device", "mandatory: serial device", cxxopts::value<std::string>());
@@ -146,6 +139,11 @@ int main(int argc, char **argv) {
     options.add_options("version information")("git-hash", "print git hash");
     options.add_options("other")("license", "show licences (short)");
     options.add_options("other")("license-full", "show licences (full license text)");
+    options.add_options("signal")(
+            "k,signal", "send SIGUSR1 to process on writing modbus commands", cxxopts::value<std::vector<pid_t>>());
+    options.add_options("signal")("signal-register",
+                                  "allow processes to register themselves for receiving SIGUSR1 on writing modbus "
+                                  "commands by sending SIGUSR1.");
 
     // parse arguments
     cxxopts::ParseResult args;
@@ -215,6 +213,25 @@ int main(int argc, char **argv) {
 #endif
                   << '\n';
         std::cout << "   from git commit " << RCS_HASH << '\n';
+
+        std::cout << "Libraries:\n";
+
+        std::cout << "   " << cxxshm_version_info::NAME << ' ' << cxxshm_version_info::VERSION_STR << '\n';
+        std::cout << "      compiled with " << cxxshm_version_info::COMPILER << '\n';
+        std::cout << "      on system " << cxxshm_version_info::SYSTEM << '\n';
+        std::cout << "      from git commit " << cxxshm_version_info::GIT_HASH << '\n';
+
+        std::cout << "   " << cxxsemaphore_version_info::NAME << ' ' << cxxsemaphore_version_info::VERSION_STR << '\n';
+        std::cout << "      compiled with " << cxxsemaphore_version_info::COMPILER << '\n';
+        std::cout << "      on system " << cxxsemaphore_version_info::SYSTEM << '\n';
+        std::cout << "      from git commit " << cxxsemaphore_version_info::GIT_HASH << '\n';
+
+        std::cout << "   libmodbus " << LIBMODBUS_VERSION_STRING << '\n';
+
+        std::cout << "   cxxopts " << static_cast<int>(cxxopts::version.major) << '.'
+                  << static_cast<int>(cxxopts::version.minor) << '.' << static_cast<int>(cxxopts::version.patch)
+                  << '\n';
+
         return EX_OK;
     }
 
@@ -230,34 +247,38 @@ int main(int argc, char **argv) {
     }
 
     if (args.count("license-full")) {
-        print_licenses(std::cout, false);
+        print_licenses(std::cout, true);
         return EX_OK;
     }
 
     // check arguments
     if (args["do-registers"].as<std::size_t>() > MAX_MODBUS_REGISTERS) {
-        std::cerr << "to many do_registers (maximum: 65536)." << '\n';
+        std::cerr << Print_Time::iso << " ERROR: to many do-registers (maximum: " << MAX_MODBUS_REGISTERS << ")."
+                  << '\n';
         return exit_usage();
     }
 
     if (args["di-registers"].as<std::size_t>() > MAX_MODBUS_REGISTERS) {
-        std::cerr << "to many do_registers (maximum: 65536)." << '\n';
+        std::cerr << Print_Time::iso << " ERROR: to many di-registers (maximum: " << MAX_MODBUS_REGISTERS << ")."
+                  << '\n';
         return exit_usage();
     }
 
     if (args["ao-registers"].as<std::size_t>() > MAX_MODBUS_REGISTERS) {
-        std::cerr << "to many do_registers (maximum: 65536)." << '\n';
+        std::cerr << Print_Time::iso << " ERROR: to many ao-registers (maximum: " << MAX_MODBUS_REGISTERS << ")."
+                  << '\n';
         return exit_usage();
     }
 
     if (args["ai-registers"].as<std::size_t>() > MAX_MODBUS_REGISTERS) {
-        std::cerr << "to many do_registers (maximum: 65536)." << '\n';
+        std::cerr << Print_Time::iso << " ERROR: to many ai-registers (maximum: " << MAX_MODBUS_REGISTERS << ")."
+                  << '\n';
         return exit_usage();
     }
 
     const auto PARITY = toupper(args["parity"].as<char>());
     if (PARITY != 'N' && PARITY != 'E' && PARITY != 'O') {
-        std::cerr << "invalid parity" << '\n';
+        std::cerr << Print_Time::iso << " ERROR: invalid parity" << '\n';
         return exit_usage();
     }
 
@@ -287,6 +308,49 @@ int main(int argc, char **argv) {
         std::cerr << "Cannot operate in RS232 and RS485 mode at the same time." << '\n';
         return exit_usage();
     }
+
+    const bool SIGNAL_REGISTER = args.count("signal-register") > 0;
+
+#ifdef COMPILER_CLANG
+#    pragma clang diagnostic push
+#    pragma clang diagnostic ignored "-Wdisabled-macro-expansion"
+#endif
+    // establish signal handler
+    struct sigaction term_sa {};
+    term_sa.sa_handler = sig_term_handler;
+    term_sa.sa_flags   = SA_RESTART;
+    sigemptyset(&term_sa.sa_mask);
+    std::vector<int> term_signals(TERM_SIGNALS.begin(), TERM_SIGNALS.end());
+    if (!SIGNAL_REGISTER) term_signals.emplace_back(SIGUSR1);
+    for (const auto SIGNO : TERM_SIGNALS) {
+        if (sigaction(SIGNO, &term_sa, nullptr)) {
+            perror("Failed to establish signal handler");
+            return EX_OSERR;
+        }
+    }
+
+    if (SIGNAL_REGISTER) {
+        struct sigaction sigusr1_sa {};
+        sigusr1_sa.sa_sigaction = sig_usr1_handler;
+        sigusr1_sa.sa_flags     = SA_RESTART | SA_SIGINFO;
+        sigemptyset(&sigusr1_sa.sa_mask);
+        if (sigaction(SIGUSR1, &sigusr1_sa, nullptr)) {
+            perror("Failed to establish signal handler");
+            return EX_OSERR;
+        }
+    }
+#ifdef COMPILER_CLANG
+#    pragma clang diagnostic pop
+#endif
+
+    bool SIGNAL_PROCESS = args.count("signal") > 0;
+    if (SIGNAL_PROCESS) {
+        auto &processes = args["signal"].as<std::vector<pid_t>>();
+        for (auto proc : processes) {
+            Mb_Proc_Signal::get_instance().add_process(proc);
+        }
+    }
+    if (SIGNAL_REGISTER) SIGNAL_PROCESS = true;
 
     // SHM permissions
     static constexpr mode_t DEFAULT_SHM_PERMISSIONS = 0660;
@@ -335,10 +399,10 @@ int main(int argc, char **argv) {
                                                        mapping->get_mapping());
         client->set_debug(args.count("monitor"));
     } catch (const std::runtime_error &e) {
-        std::cerr << e.what() << '\n';
+        std::cerr << Print_Time::iso << " ERROR: " << e.what() << '\n';
         return EX_SOFTWARE;
     } catch (cxxopts::exceptions::option_has_no_value::exception &e) {
-        std::cerr << e.what() << '\n';
+        std::cerr << Print_Time::iso << "ERROR: " << e.what() << '\n';
         return exit_usage();
     }
     socket = client->get_socket();
@@ -349,7 +413,7 @@ int main(int argc, char **argv) {
 
         if (args.count("byte-timeout")) { client->set_byte_timeout(args["byte-timeout"].as<double>()); }
     } catch (const std::runtime_error &e) {
-        std::cerr << e.what() << '\n';
+        std::cerr << Print_Time::iso << " ERROR: " << e.what() << '\n';
         return EX_SOFTWARE;
     }
 
@@ -369,7 +433,7 @@ int main(int argc, char **argv) {
     bool connection_closed = false;
     while (!terminate && !connection_closed) {
         try {
-            connection_closed = client->handle_request();
+            connection_closed = client->handle_request(SIGNAL_PROCESS ? &mb_callback : nullptr);
         } catch (const std::runtime_error &e) {
             // clang-tidy (LLVM 12.0.1) warning "Condition is always true" is not correct
             if (!terminate) std::cerr << e.what() << '\n';
@@ -379,5 +443,5 @@ int main(int argc, char **argv) {
 
     if (connection_closed) std::cerr << Print_Time::iso << " INFO: Modbus Server closed connection." << '\n';
 
-    std::cerr << "Terminating..." << '\n';
+    std::cerr << Print_Time::iso << " INFO: Terminating...\n";
 }
